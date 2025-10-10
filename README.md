@@ -72,7 +72,7 @@ Use the OpenTofu configuration in `./opentofu` to spin up an Autopilot GKE clust
 - [Google Cloud CLI](https://cloud.google.com/sdk/docs/install) authenticated for your project (`gcloud auth application-default login` or a service-account key in `GOOGLE_APPLICATION_CREDENTIALS`)
 - IAM permissions to enable `compute.googleapis.com` / `container.googleapis.com`, create Autopilot clusters, and manage load balancers
 - [Helm 3.8+](https://helm.sh/) (required by the Helm provider)
-- Public DNS control for the domain you plan to serve (you will point five records at the load balancer IP after apply)
+- A Cloud DNS managed zone that serves the domain or subdomain you’ll dedicate to ESS (delegated NS records already in place)
 
 ### Configure once
 
@@ -80,7 +80,9 @@ Create `opentofu/tofu.tfvars` with the only required inputs:
 
 ```hcl
 project_id = "my-gcp-project"
-domain     = "example.com"
+domain         = "matrix.example.com"
+dns_zone_name  = "matrix-zone"
+dns_project_id = "my-dns-project"   # optional; defaults to project_id
 # region = "us-central1"   # optional override
 ```
 
@@ -89,11 +91,20 @@ domain     = "example.com"
 ```bash
 cd opentofu
 tofu init
-tofu plan  -var-file=tofu.tfvars          # optional review
-tofu apply -var-file=tofu.tfvars          # creates the cluster + deploys ESS
+
+# First run: create the GKE cluster so the Kubernetes provider has a live endpoint
+tofu apply \
+  -target=google_project_service.compute \
+  -target=google_project_service.container \
+  -target=google_container_cluster.autopilot \
+  -var-file=tofu.tfvars
+
+# After the cluster exists you can plan/apply the rest
+tofu plan -var-file=tofu.tfvars
+tofu apply -var-file=tofu.tfvars
 ```
 
-During `apply` OpenTofu will enable the necessary APIs, create an Autopilot cluster, provision a `ManagedCertificate`, and install the ESS Helm chart with Ingress resources for:
+During `apply` OpenTofu will enable the necessary APIs, create an Autopilot cluster, reserve a global static IP, provision a Google-managed certificate, install the ESS Helm chart, and publish DNS records (in `dns_project_id` when provided) for:
 
 - `chat.${domain}`
 - `admin.${domain}`
@@ -101,13 +112,9 @@ During `apply` OpenTofu will enable the necessary APIs, create an Autopilot clus
 - `account.${domain}`
 - `rtc.${domain}`
 
-Watch the ingress until it has an external IP:
+All five hostnames share the reserved static IP, so as soon as DNS propagates the ManagedCertificate will transition to `Active` (typically within 15 minutes).
 
-```bash
-kubectl get ingress -n ess -w
-```
-
-Update your DNS A records for the five hostnames to the reported IP. Google-managed certificates usually become `Active` once DNS propagates (up to ~15 minutes).
+Monitor `kubectl get ingress -n ess -w` until the IP shows up and watch the managed certificate become `Active`.
 
 ### Cleanup (GCP)
 
@@ -117,4 +124,4 @@ From the `opentofu/` directory:
 tofu destroy -var-file=tofu.tfvars
 ```
 
-This tears down the Helm release and Autopilot cluster. Remember to remove any DNS records you added manually.
+This tears down the Helm release, DNS records, and Autopilot cluster.

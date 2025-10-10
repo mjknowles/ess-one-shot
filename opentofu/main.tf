@@ -1,5 +1,5 @@
 locals {
-  base_domain = trimsuffix(trim(var.domain), ".")
+  base_domain = trimsuffix(trimspace(var.domain), ".")
 
   hostnames = {
     admin   = "admin.${local.base_domain}"
@@ -10,6 +10,8 @@ locals {
   }
 
   managed_certificate_name = "ess-managed-cert"
+  static_ip_name           = "ess-ingress-ip"
+  dns_project              = trimspace(var.dns_project_id) != "" ? trimspace(var.dns_project_id) : var.project_id
 }
 
 provider "google" {
@@ -18,6 +20,11 @@ provider "google" {
 }
 
 data "google_client_config" "current" {}
+
+provider "google" {
+  alias   = "dns"
+  project = local.dns_project
+}
 
 resource "google_project_service" "compute" {
   project                    = var.project_id
@@ -31,6 +38,11 @@ resource "google_project_service" "container" {
   service                    = "container.googleapis.com"
   disable_on_destroy         = false
   disable_dependent_services = false
+}
+
+resource "google_compute_global_address" "ingress" {
+  name    = local.static_ip_name
+  project = var.project_id
 }
 
 resource "google_container_cluster" "autopilot" {
@@ -52,13 +64,18 @@ locals {
 }
 
 provider "kubernetes" {
+  experiments {
+    manifest_resource = true
+  }
+  load_config_file      = false
   host                   = local.cluster_endpoint
   token                  = data.google_client_config.current.access_token
   cluster_ca_certificate = local.cluster_ca
 }
 
 provider "helm" {
-  kubernetes {
+  kubernetes = {
+    load_config_file      = false
     host                   = local.cluster_endpoint
     token                  = data.google_client_config.current.access_token
     cluster_ca_certificate = local.cluster_ca
@@ -94,14 +111,17 @@ resource "kubernetes_manifest" "managed_certificate" {
 }
 
 locals {
+  ingress_annotations = {
+    "networking.gke.io/managed-certificates"      = local.managed_certificate_name
+    "kubernetes.io/ingress.global-static-ip-name" = google_compute_global_address.ingress.name
+  }
+
   ess_values = {
     ingress = {
       className      = "gce"
       controllerType = null
       tlsEnabled     = true
-      annotations = {
-        "networking.gke.io/managed-certificates" = local.managed_certificate_name
-      }
+      annotations    = local.ingress_annotations
     }
     serverName = local.base_domain
     elementAdmin = {
@@ -147,6 +167,25 @@ resource "helm_release" "ess" {
   ]
 
   depends_on = [
-    kubernetes_manifest.managed_certificate
+    kubernetes_manifest.managed_certificate,
+    google_compute_global_address.ingress
   ]
+}
+
+data "google_dns_managed_zone" "ess" {
+  provider = google.dns
+  name     = var.dns_zone_name
+}
+
+resource "google_dns_record_set" "ess_hosts" {
+  for_each = local.hostnames
+  provider = google.dns
+
+  name         = "${each.value}."
+  type         = "A"
+  ttl          = 300
+  managed_zone = data.google_dns_managed_zone.ess.name
+  project      = local.dns_project
+
+  rrdatas = [google_compute_global_address.ingress.address]
 }

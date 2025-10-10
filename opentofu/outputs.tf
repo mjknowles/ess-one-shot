@@ -18,6 +18,11 @@ output "managed_certificate_name" {
   value       = kubernetes_manifest.managed_certificate.manifest.metadata.name
 }
 
+output "ingress_ip_address" {
+  description = "Global static IP assigned to the HTTPS load balancer."
+  value       = google_compute_global_address.ingress.address
+}
+
 output "hosts" {
   description = "Ingress hostnames for the Element Server Suite components."
   value       = local.hostnames

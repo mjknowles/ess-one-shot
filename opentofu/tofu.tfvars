@@ -1,0 +1,5 @@
+project_id = "gcp-ess"
+domain         = "matrix.mjknowles.dev"
+dns_zone_name  = "mjknowles-dev-zone"
+dns_project_id = "dns-infra-474704"
+# region = "us-central1"   # optional override
