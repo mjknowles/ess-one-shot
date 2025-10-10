@@ -64,10 +64,6 @@ locals {
 }
 
 provider "kubernetes" {
-  experiments {
-    manifest_resource = true
-  }
-  load_config_file      = false
   host                   = local.cluster_endpoint
   token                  = data.google_client_config.current.access_token
   cluster_ca_certificate = local.cluster_ca
@@ -75,7 +71,6 @@ provider "kubernetes" {
 
 provider "helm" {
   kubernetes = {
-    load_config_file      = false
     host                   = local.cluster_endpoint
     token                  = data.google_client_config.current.access_token
     cluster_ca_certificate = local.cluster_ca

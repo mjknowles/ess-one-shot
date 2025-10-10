@@ -85,9 +85,19 @@ parse_args() {
     esac
   done
 
-  [[ -z "$PROJECT_ID" ]] && fatal "--project is required"
-  [[ -z "$BUCKET_NAME" ]] && fatal "--bucket is required"
-  [[ -z "$LOCATION" ]] && fatal "--location is required"
+  if [[ -z "$PROJECT_ID" ]]; then
+    fatal "--project is required"
+  fi
+
+  if [[ -z "$BUCKET_NAME" ]]; then
+    fatal "--bucket is required"
+  fi
+
+  if [[ -z "$LOCATION" ]]; then
+    fatal "--location is required"
+  fi
+
+  return 0
 }
 
 ensure_dependencies() {
@@ -95,9 +105,13 @@ ensure_dependencies() {
 }
 
 bucket_exists() {
-  gcloud storage buckets describe "gs://${BUCKET_NAME}" \
-    --project "${PROJECT_ID}" \
-    --format="value(name)" >/dev/null 2>&1
+  if gcloud storage buckets describe "gs://${BUCKET_NAME}" \
+      --project "${PROJECT_ID}" \
+      --format="value(name)" >/dev/null; then
+    return 0
+  fi
+
+  return 1
 }
 
 create_bucket() {
@@ -106,7 +120,7 @@ create_bucket() {
     --project "${PROJECT_ID}" \
     --location "${LOCATION}" \
     --uniform-bucket-level-access \
-    --public-access-prevention enforced
+    --pap
 }
 
 enable_versioning() {

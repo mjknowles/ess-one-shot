@@ -29,6 +29,8 @@ dns_project_id = "dns-infra"   # optional; defaults to project_id
   --project ess-one-shot \
   --bucket ess-one-shot-tfstate \
   --location us
+
+tofu init -backend-config=backend.hcl
 ```
 
 The script creates (or validates) the GCS bucket, enables versioning, applies uniform bucket-level access, and writes `backend.hcl` with the supplied settings. Pass `--state-admin you@example.com` or a service account email to grant bucket access for OpenTofu.
@@ -36,7 +38,6 @@ The script creates (or validates) the GCS bucket, enables versioning, applies un
 ### Deploy
 
 ```bash
-tofu init -backend-config=backend.hcl
 
 # First run: create the GKE cluster so the Kubernetes provider has a live endpoint
 tofu apply \
