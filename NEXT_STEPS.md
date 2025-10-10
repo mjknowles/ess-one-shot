@@ -6,7 +6,5 @@
 
 ## GCP
 
-1. Install and authenticate the Google Cloud CLI, then run ./launch-gcp.sh --project <id> --region <region>
-   --domain <your-domain> once DNS/TLS details are ready.
-2. Watch kubectl get svc -n ingress-nginx ess-ingress-ingress-nginx-controller -w and update DNS/TLS values
-   before rerunning with --force-values if needed.
+1. Install and authenticate the Google Cloud CLI, then configure `opentofu/tofu.tfvars` with `project_id` and `domain` (override `region` if you prefer). Run `cd opentofu && tofu init && tofu apply -var-file=tofu.tfvars`.
+2. Watch `kubectl get ingress -n ess -w`, add DNS records for the reported IP, and reapply if you change the base domain later.

@@ -2,20 +2,23 @@
 
 Spin up a local Kubernetes cluster and deploy the Element Server Suite (ESS) community Helm chart in one shot.
 
-## Prerequisites
+## Local Deployment
+
+### Prerequisites
 
 - Docker (or another container runtime that kind can talk to)
 - [kind](https://kind.sigs.k8s.io/) (pre-installed as requested)
 - [kubectl](https://kubernetes.io/docs/tasks/tools/) (pre-installed as requested)
 - [Helm 3.8+](https://helm.sh/) (required for OCI registry support)
 
-## Quick start
+### Quick start
 
 ```bash
 ./launch-local.sh
 ```
 
 The script will:
+
 - Verify that `kind`, `kubectl`, and `helm` are available.
 - Create or reuse a `kind` cluster named `ess-one-shot` (one control-plane + one worker node) and expose ingress ports `8080`/`8443` to your host.
 - Install the [ingress-nginx](https://kubernetes.github.io/ingress-nginx/) controller tailored for `kind`.
@@ -30,7 +33,7 @@ Once pods settle, the endpoints will be available through ingress on the followi
 - Matrix Authentication Service: `https://account.127-0-0-1.nip.io:8443`
 - Matrix RTC: `https://rtc.127-0-0-1.nip.io:8443`
 
-## Customising the launch
+### Customising the launch
 
 ```
 ./launch-local.sh --help
@@ -43,7 +46,7 @@ Once pods settle, the endpoints will be available through ingress on the followi
 
 The script reuses the generated values file on subsequent runs unless `--force-values` is supplied, making it easy to tweak hostnames or append additional overrides alongside `helm`’s `-f` or `--set` options.
 
-## What happens next?
+### What happens next?
 
 - ESS disables open registration. Create an initial user once the pods are up:
   ```
@@ -52,77 +55,66 @@ The script reuses the generated values file on subsequent runs unless `--force-v
 - TLS is self-signed by default. For proper certificates, follow the [cert-manager instructions in the upstream README](https://github.com/element-hq/ess-helm#preparing-the-environment).
 - Review the [official ESS Helm documentation](https://github.com/element-hq/ess-helm#installation) for advanced configuration (external PostgreSQL, TLS, storage, etc.).
 
-## Tearing it down
+### Tearing it down
 
 - Remove the release: `helm uninstall ess -n ess`
 - Delete the kind cluster when you are done: `kind delete cluster --name ess-one-shot`
 
 All generated configuration is kept in `.ess-values/` so you can inspect or reuse it between runs.
 
-## GCP (GKE) deployment
+## GCP (GKE) Deployment with OpenTofu
 
-`launch-gcp.sh` provisions a Google Kubernetes Engine cluster and deploys ESS.
+Use the OpenTofu configuration in `./opentofu` to spin up an Autopilot GKE cluster, configure Google-managed HTTPS ingress, and deploy the Element Server Suite with a single apply.
 
 ### Prerequisites (GCP)
 
-- [Google Cloud CLI](https://cloud.google.com/sdk/docs/install) (`gcloud`) authenticated against your project
-- IAM permissions to enable `container.googleapis.com` and `compute.googleapis.com`, create clusters, and manage load balancers
-- Helm 3.8+ and kubectl (the script reuses the same binaries as the local workflow)
-- Optional: a reserved static IP address, DNS zone, and TLS materials (the script accepts them when ready)
+- [OpenTofu 1.6+](https://opentofu.org/)
+- [Google Cloud CLI](https://cloud.google.com/sdk/docs/install) authenticated for your project (`gcloud auth application-default login` or a service-account key in `GOOGLE_APPLICATION_CREDENTIALS`)
+- IAM permissions to enable `compute.googleapis.com` / `container.googleapis.com`, create Autopilot clusters, and manage load balancers
+- [Helm 3.8+](https://helm.sh/) (required by the Helm provider)
+- Public DNS control for the domain you plan to serve (you will point five records at the load balancer IP after apply)
 
-### Launching on GKE
+### Configure once
 
-```bash
-./launch-gcp.sh --project <gcp-project-id> --region us-central1 --domain example.com
+Create `opentofu/tofu.tfvars` with the only required inputs:
+
+```hcl
+project_id = "my-gcp-project"
+domain     = "example.com"
+# region = "us-central1"   # optional override
 ```
 
-If you do not have working certificates yet, you can still supply your intended domain; the script will mint a self-signed secret for `ingress-nginx` (expect browser warnings) or you can lean on Google-managed certificates with the GCE ingress option described below.
-
-The script will:
-- Enable the Container and Compute APIs (no-op if already enabled).
-- Create or reuse a GKE standard cluster (`--zone` for zonal, `--autopilot` to switch modes) and fetch kubeconfig credentials.
-- Install the `ingress-nginx` controller as a LoadBalancer service (add `--lb-ip-address` to pin a static IP).
-- Generate `.ess-values/gcp-hostnames.yaml` with your ESS hostnames, ingress defaults, and optional TLS secret.
-- Run `helm upgrade --install` with those values in the `ess` namespace and wait for resources to become ready.
-- If you do not provide `--tls-secret`, the script will create a short-lived self-signed secret (`ess-autogen-tls`) for `ingress-nginx` so the chart can start up; replace it with real certificates later.
-
-By default, traffic is served through `ingress-nginx`. Follow the external IP assignment with:
+### Deploy
 
 ```bash
-kubectl get svc -n ingress-nginx ess-ingress-ingress-nginx-controller -w
+cd opentofu
+tofu init
+tofu plan  -var-file=tofu.tfvars          # optional review
+tofu apply -var-file=tofu.tfvars          # creates the cluster + deploys ESS
 ```
 
-Once the external IP is known, point your DNS records (`chat.`, `admin.`, `matrix.`, `account.`, `rtc.`) to that address. Re-run the script with `--force-values` when you are ready to:
+During `apply` OpenTofu will enable the necessary APIs, create an Autopilot cluster, provision a `ManagedCertificate`, and install the ESS Helm chart with Ingress resources for:
 
-- Switch domains: `--domain your.new.domain`
-- Provide TLS: either pass `--tls-secret existing-k8s-secret` (the script verifies it or generates one if you omit it for `ingress-nginx`), or use `--ingress-provider gce --gcp-managed-cert` to let Google issue certificates once DNS resolves.
-- Override Helm configuration: append `-- --set key=value` or `-- -f extra-values.yaml`
+- `chat.${domain}`
+- `admin.${domain}`
+- `matrix.${domain}`
+- `account.${domain}`
+- `rtc.${domain}`
 
-### Using the Google Cloud Load Balancer
-
-To lean on the built-in Google Cloud HTTP(S) Load Balancer and managed certificates, switch the ingress provider:
-
-```bash
-./launch-gcp.sh \
-  --project <gcp-project-id> \
-  --region us-central1 \
-  --ingress-provider gce \
-  --domain example.com \
-  --gcp-managed-cert \
-  --gcp-managed-cert-hosts chat.example.com,admin.example.com,matrix.example.com,account.example.com,rtc.example.com
-```
-
-You can optionally reserve a global static IP and pass it via `--gcp-static-ip-name`. Watch ingress readiness with:
+Watch the ingress until it has an external IP:
 
 ```bash
 kubectl get ingress -n ess -w
 ```
 
-Google-managed certificates need DNS records in place and can take up to 15 minutes to become active.
+Update your DNS A records for the five hostnames to the reported IP. Google-managed certificates usually become `Active` once DNS propagates (up to ~15 minutes).
 
 ### Cleanup (GCP)
 
-- Remove the Helm release: `helm uninstall ess -n ess`
-- Delete the ingress controller: `helm uninstall ess-ingress -n ingress-nginx`
-- Delete the cluster when finished: `gcloud container clusters delete ess-one-shot-gke --region us-central1`
-- Release any reserved addresses or DNS records you created
+From the `opentofu/` directory:
+
+```bash
+tofu destroy -var-file=tofu.tfvars
+```
+
+This tears down the Helm release and Autopilot cluster. Remember to remove any DNS records you added manually.

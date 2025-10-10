@@ -1,0 +1,31 @@
+variable "project_id" {
+  description = "Google Cloud project ID where the Element Server Suite will be deployed."
+  type        = string
+
+  validation {
+    condition     = trim(var.project_id) != ""
+    error_message = "project_id must not be empty."
+  }
+}
+
+variable "region" {
+  description = "GCP region for the Autopilot GKE cluster."
+  type        = string
+  default     = "us-central1"
+}
+
+variable "domain" {
+  description = "Base domain for ESS ingress hostnames (e.g. example.com)."
+  type        = string
+
+  validation {
+    condition     = trim(lower(var.domain)) != "" && trim(lower(var.domain)) != "placeholder_domain"
+    error_message = "Provide a real domain name (not PLACEHOLDER_DOMAIN)."
+  }
+}
+
+variable "cluster_name" {
+  description = "Name of the Autopilot GKE cluster to create."
+  type        = string
+  default     = "ess-one-shot-gke"
+}
