@@ -73,8 +73,10 @@ All generated configuration is kept in `.ess-values/` so you can inspect or reus
 ### Launching on GKE
 
 ```bash
-./launch-gcp.sh --project <gcp-project-id> --region us-central1 --domain matrix.example.com
+./launch-gcp.sh --project <gcp-project-id> --region us-central1 --domain example.com
 ```
+
+If you do not have working certificates yet, you can still supply your intended domain; the script will mint a self-signed secret for `ingress-nginx` (expect browser warnings) or you can lean on Google-managed certificates with the GCE ingress option described below.
 
 The script will:
 - Enable the Container and Compute APIs (no-op if already enabled).
@@ -82,8 +84,9 @@ The script will:
 - Install the `ingress-nginx` controller as a LoadBalancer service (add `--lb-ip-address` to pin a static IP).
 - Generate `.ess-values/gcp-hostnames.yaml` with your ESS hostnames, ingress defaults, and optional TLS secret.
 - Run `helm upgrade --install` with those values in the `ess` namespace and wait for resources to become ready.
+- If you do not provide `--tls-secret`, the script will create a short-lived self-signed secret (`ess-autogen-tls`) for `ingress-nginx` so the chart can start up; replace it with real certificates later.
 
-Follow the load balancer assignment with:
+By default, traffic is served through `ingress-nginx`. Follow the external IP assignment with:
 
 ```bash
 kubectl get svc -n ingress-nginx ess-ingress-ingress-nginx-controller -w
@@ -92,8 +95,30 @@ kubectl get svc -n ingress-nginx ess-ingress-ingress-nginx-controller -w
 Once the external IP is known, point your DNS records (`chat.`, `admin.`, `matrix.`, `account.`, `rtc.`) to that address. Re-run the script with `--force-values` when you are ready to:
 
 - Switch domains: `--domain your.new.domain`
-- Provide TLS: `--tls-secret existing-k8s-secret` or `--disable-tls` to serve HTTP temporarily
+- Provide TLS: either pass `--tls-secret existing-k8s-secret` (the script verifies it or generates one if you omit it for `ingress-nginx`), or use `--ingress-provider gce --gcp-managed-cert` to let Google issue certificates once DNS resolves.
 - Override Helm configuration: append `-- --set key=value` or `-- -f extra-values.yaml`
+
+### Using the Google Cloud Load Balancer
+
+To lean on the built-in Google Cloud HTTP(S) Load Balancer and managed certificates, switch the ingress provider:
+
+```bash
+./launch-gcp.sh \
+  --project <gcp-project-id> \
+  --region us-central1 \
+  --ingress-provider gce \
+  --domain example.com \
+  --gcp-managed-cert \
+  --gcp-managed-cert-hosts chat.example.com,admin.example.com,matrix.example.com,account.example.com,rtc.example.com
+```
+
+You can optionally reserve a global static IP and pass it via `--gcp-static-ip-name`. Watch ingress readiness with:
+
+```bash
+kubectl get ingress -n ess -w
+```
+
+Google-managed certificates need DNS records in place and can take up to 15 minutes to become active.
 
 ### Cleanup (GCP)
 

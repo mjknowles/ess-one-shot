@@ -15,8 +15,8 @@ NETWORK=""
 SUBNETWORK=""
 LB_IP_ADDRESS=""
 DOMAIN="PLACEHOLDER_DOMAIN"
-TLS_ENABLED="true"
 TLS_SECRET_NAME=""
+INGRESS_PROVIDER="nginx"
 INGRESS_CLASS_NAME="nginx"
 INGRESS_CONTROLLER_TYPE="ingress-nginx"
 VALUES_DIR="${PWD}/.ess-values"
@@ -28,6 +28,15 @@ INGRESS_CHART="ingress-nginx/ingress-nginx"
 SKIP_CLUSTER_CREATION="false"
 FORCE_VALUES="false"
 EXTRA_HELM_ARGS=()
+INGRESS_ANNOTATIONS=()
+GCP_MANAGED_CERT="false"
+GCP_MANAGED_CERT_NAME="ess-managed-cert"
+GCP_MANAGED_CERT_HOSTS=""
+GCP_STATIC_IP_NAME=""
+USER_SET_INGRESS_CLASS="false"
+USER_SET_INGRESS_CONTROLLER="false"
+AUTO_TLS_SECRET_NAME="ess-autogen-tls"
+GENERATE_SELF_SIGNED="false"
 
 usage() {
   cat <<EOF
@@ -47,13 +56,17 @@ Cluster options:
   --release-channel NAME    Release channel (rapid|regular|stable) for standard clusters (default: ${RELEASE_CHANNEL})
   --network NAME            Optional VPC network to attach the cluster to
   --subnetwork NAME         Optional subnetwork inside the chosen VPC
-  --lb-ip-address IP        Optional reserved static IP for ingress-nginx LoadBalancer
+  --lb-ip-address IP        Reserved static IP for ingress-nginx LoadBalancer (nginx provider only)
+  --ingress-provider NAME   Choose ingress controller: nginx (default) or gce
+  --gcp-static-ip-name NAME GCE static global IP name (gce provider only)
   --skip-cluster            Assume the target cluster already exists and skip creation
 
 Ingress & chart options:
   --domain DOMAIN           Base domain for ESS ingress hostnames (default: ${DOMAIN})
-  --disable-tls             Turn off TLS configuration in the generated values file
   --tls-secret NAME         Existing TLS secret to reference for all ingresses
+  --gcp-managed-cert        Request a Google-managed certificate (gce provider only)
+  --gcp-managed-cert-name NAME   ManagedCertificate resource name (default: ${GCP_MANAGED_CERT_NAME})
+  --gcp-managed-cert-hosts HOSTS Comma-separated domains for the managed certificate
   --ingress-class NAME      IngressClass name to reference (default: ${INGRESS_CLASS_NAME})
   --ingress-controller-type TYPE  Chart controller hint (default: ${INGRESS_CONTROLLER_TYPE})
   --values-file PATH        Where to write the generated values file (default: ${VALUES_FILE})
@@ -149,28 +162,50 @@ parse_args() {
         LB_IP_ADDRESS="$2"
         shift 2
         ;;
+      --ingress-provider)
+        [[ $# -lt 2 ]] && fatal "--ingress-provider requires an argument"
+        INGRESS_PROVIDER="$(printf '%s' "$2" | tr '[:upper:]' '[:lower:]')"
+        shift 2
+        ;;
+      --gcp-static-ip-name)
+        [[ $# -lt 2 ]] && fatal "--gcp-static-ip-name requires an argument"
+        GCP_STATIC_IP_NAME="$2"
+        shift 2
+        ;;
       --domain)
         [[ $# -lt 2 ]] && fatal "--domain requires an argument"
         DOMAIN="$2"
         shift 2
-        ;;
-      --disable-tls)
-        TLS_ENABLED="false"
-        shift
         ;;
       --tls-secret)
         [[ $# -lt 2 ]] && fatal "--tls-secret requires an argument"
         TLS_SECRET_NAME="$2"
         shift 2
         ;;
+      --gcp-managed-cert)
+        GCP_MANAGED_CERT="true"
+        shift
+        ;;
+      --gcp-managed-cert-name)
+        [[ $# -lt 2 ]] && fatal "--gcp-managed-cert-name requires an argument"
+        GCP_MANAGED_CERT_NAME="$2"
+        shift 2
+        ;;
+      --gcp-managed-cert-hosts)
+        [[ $# -lt 2 ]] && fatal "--gcp-managed-cert-hosts requires an argument"
+        GCP_MANAGED_CERT_HOSTS="$2"
+        shift 2
+        ;;
       --ingress-class)
         [[ $# -lt 2 ]] && fatal "--ingress-class requires an argument"
         INGRESS_CLASS_NAME="$2"
+        USER_SET_INGRESS_CLASS="true"
         shift 2
         ;;
       --ingress-controller-type)
         [[ $# -lt 2 ]] && fatal "--ingress-controller-type requires an argument"
         INGRESS_CONTROLLER_TYPE="$2"
+        USER_SET_INGRESS_CONTROLLER="true"
         shift 2
         ;;
       --values-file)
@@ -206,6 +241,84 @@ parse_args() {
 region_from_zone() {
   [[ -z "$1" ]] && return
   echo "${1%-*}"
+}
+
+split_csv() {
+  local input="$1"
+  local IFS=","
+  read -ra __split_result <<<"$input"
+  printf '%s\n' "${__split_result[@]}"
+}
+
+ess_hostnames() {
+  cat <<EOF
+admin.${DOMAIN}
+chat.${DOMAIN}
+matrix.${DOMAIN}
+account.${DOMAIN}
+rtc.${DOMAIN}
+EOF
+}
+
+configure_ingress_settings() {
+  [[ "$DOMAIN" != "PLACEHOLDER_DOMAIN" ]] || fatal "Please supply a real base domain via --domain."
+
+  case "$INGRESS_PROVIDER" in
+    nginx)
+      [[ "$USER_SET_INGRESS_CLASS" == "false" ]] && INGRESS_CLASS_NAME="nginx"
+      [[ "$USER_SET_INGRESS_CONTROLLER" == "false" ]] && INGRESS_CONTROLLER_TYPE="ingress-nginx"
+      if [[ -n "$GCP_STATIC_IP_NAME" ]]; then
+        fatal "--gcp-static-ip-name is only valid with --ingress-provider gce"
+      fi
+      if [[ "$GCP_MANAGED_CERT" == "true" ]]; then
+        fatal "--gcp-managed-cert is only supported with --ingress-provider gce"
+      fi
+      if [[ -z "$TLS_SECRET_NAME" ]]; then
+        TLS_SECRET_NAME="$AUTO_TLS_SECRET_NAME"
+        GENERATE_SELF_SIGNED="true"
+      fi
+      ;;
+    gce)
+      [[ "$USER_SET_INGRESS_CLASS" == "false" ]] && INGRESS_CLASS_NAME="gce"
+      [[ "$USER_SET_INGRESS_CONTROLLER" == "false" ]] && INGRESS_CONTROLLER_TYPE=""
+      if [[ -n "$LB_IP_ADDRESS" ]]; then
+        fatal "--lb-ip-address is only valid with --ingress-provider nginx"
+      fi
+      if [[ -n "$GCP_STATIC_IP_NAME" ]]; then
+        INGRESS_ANNOTATIONS+=("kubernetes.io/ingress.global-static-ip-name=${GCP_STATIC_IP_NAME}")
+      fi
+      if [[ "$GCP_MANAGED_CERT" != "true" && -z "$TLS_SECRET_NAME" ]]; then
+        TLS_SECRET_NAME="$AUTO_TLS_SECRET_NAME"
+        GENERATE_SELF_SIGNED="true"
+      fi
+      ;;
+    *)
+      fatal "Unsupported ingress provider: ${INGRESS_PROVIDER} (use 'nginx' or 'gce')"
+      ;;
+  esac
+
+  if [[ "$GCP_MANAGED_CERT" == "true" ]]; then
+    [[ "$INGRESS_PROVIDER" == "gce" ]] || fatal "--gcp-managed-cert requires --ingress-provider gce"
+    [[ "$DOMAIN" != "PLACEHOLDER_DOMAIN" ]] || fatal "--gcp-managed-cert requires --domain to be set to your base domain"
+    [[ -z "$TLS_SECRET_NAME" ]] || fatal "Cannot combine --gcp-managed-cert with --tls-secret; choose one TLS handling method."
+    INGRESS_ANNOTATIONS+=("networking.gke.io/managed-certificates=${GCP_MANAGED_CERT_NAME}")
+  fi
+
+  if [[ "$INGRESS_PROVIDER" == "gce" && "$GCP_MANAGED_CERT" != "true" && "$TLS_SECRET_NAME" == "$AUTO_TLS_SECRET_NAME" ]]; then
+    echo "INFO: Generating a self-signed TLS secret '${AUTO_TLS_SECRET_NAME}' for the GCE ingress. Replace it with a real certificate when ready." >&2
+  fi
+}
+
+managed_certificate_hosts() {
+  if [[ -n "$GCP_MANAGED_CERT_HOSTS" ]]; then
+    while IFS= read -r raw_host; do
+      local cleaned="${raw_host//[[:space:]]/}"
+      [[ -n "$cleaned" ]] && printf '%s\n' "$cleaned"
+    done < <(split_csv "$GCP_MANAGED_CERT_HOSTS")
+    return
+  fi
+
+  ess_hostnames
 }
 
 ensure_dependencies() {
@@ -311,6 +424,11 @@ configure_kubectl_context() {
 }
 
 ensure_ingress_controller() {
+  if [[ "$INGRESS_PROVIDER" != "nginx" ]]; then
+    echo "Skipping ingress-nginx installation (ingress-provider=${INGRESS_PROVIDER})."
+    return
+  fi
+
   echo "Installing ingress-nginx via Helm..."
   helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx --force-update >/dev/null
   helm repo update ingress-nginx >/dev/null
@@ -342,6 +460,112 @@ ensure_namespace() {
   kubectl create namespace "$NAMESPACE"
 }
 
+generate_self_signed_secret() {
+  command_exists openssl || fatal "Missing dependency: openssl (required to generate a temporary TLS certificate)."
+
+  local tmp
+  tmp="$(mktemp -d)"
+  local key_file="${tmp}/tls.key"
+  local cert_file="${tmp}/tls.crt"
+  local cfg_file="${tmp}/openssl.cnf"
+
+  {
+    cat <<EOF
+[req]
+default_bits = 2048
+prompt = no
+default_md = sha256
+req_extensions = req_ext
+distinguished_name = dn
+
+[dn]
+CN = ${DOMAIN}
+
+[req_ext]
+subjectAltName = @alt_names
+
+[alt_names]
+EOF
+    local idx=1
+    while IFS= read -r host; do
+      printf "DNS.%d = %s\n" "$idx" "$host"
+      idx=$((idx+1))
+    done < <(ess_hostnames)
+    printf "DNS.%d = %s\n" "$idx" "$DOMAIN"
+  } >"$cfg_file"
+
+  openssl req -x509 -nodes -newkey rsa:2048 \
+    -keyout "$key_file" \
+    -out "$cert_file" \
+    -days 365 \
+    -config "$cfg_file" \
+    >/dev/null 2>&1
+
+  kubectl create secret tls "$TLS_SECRET_NAME" \
+    -n "$NAMESPACE" \
+    --cert="$cert_file" \
+    --key="$key_file" \
+    --dry-run=client \
+    -o yaml | kubectl apply -f -
+
+  rm -rf "$tmp"
+}
+
+ensure_tls_secret() {
+  if [[ -z "$TLS_SECRET_NAME" ]]; then
+    return
+  fi
+
+  if kubectl get secret "$TLS_SECRET_NAME" -n "$NAMESPACE" >/dev/null 2>&1; then
+    return
+  fi
+
+  if [[ "$GCP_MANAGED_CERT" == "true" ]]; then
+    # Managed certificates will provision TLS; no Kubernetes secret required.
+    return
+  fi
+
+  if [[ "$GENERATE_SELF_SIGNED" == "true" ]]; then
+    echo "Creating self-signed TLS secret '${TLS_SECRET_NAME}' in namespace '${NAMESPACE}'..."
+    generate_self_signed_secret
+    return
+  fi
+
+  fatal "TLS secret '${TLS_SECRET_NAME}' not found in namespace '${NAMESPACE}'. Please create it or rerun with a different option."
+}
+
+ensure_managed_certificate() {
+  if [[ "$GCP_MANAGED_CERT" != "true" ]]; then
+    return
+  fi
+
+  local hosts=()
+  while IFS= read -r host; do
+    [[ -z "$host" ]] && continue
+    hosts+=("$host")
+  done < <(managed_certificate_hosts)
+
+  if [[ "${#hosts[@]}" -eq 0 ]]; then
+    fatal "--gcp-managed-cert was requested but no domains were supplied"
+  fi
+
+  echo "Configuring Google managed certificate '${GCP_MANAGED_CERT_NAME}' for hosts: ${hosts[*]}"
+  {
+    cat <<EOF
+apiVersion: networking.gke.io/v1
+kind: ManagedCertificate
+metadata:
+  name: ${GCP_MANAGED_CERT_NAME}
+  namespace: ${NAMESPACE}
+spec:
+  domains:
+EOF
+    for host in "${hosts[@]}"; do
+      echo "  - ${host}"
+    done
+  } | kubectl apply -f -
+}
+
 ensure_values_file() {
   mkdir -p "$VALUES_DIR"
   if [[ -f "$VALUES_FILE" && "$FORCE_VALUES" != "true" ]]; then
@@ -353,15 +577,30 @@ ensure_values_file() {
     cat <<EOF
 ingress:
   className: ${INGRESS_CLASS_NAME}
-  controllerType: ${INGRESS_CONTROLLER_TYPE}
-  tlsEnabled: ${TLS_ENABLED}
 EOF
-    if [[ "$TLS_ENABLED" == "true" && -n "$TLS_SECRET_NAME" ]]; then
+    if [[ -n "$INGRESS_CONTROLLER_TYPE" ]]; then
+      echo "  controllerType: ${INGRESS_CONTROLLER_TYPE}"
+    else
+      echo "  # controllerType: \"\""
+    fi
+    cat <<EOF
+  tlsEnabled: true
+  annotations:
+EOF
+    if [[ "${#INGRESS_ANNOTATIONS[@]}" -eq 0 ]]; then
+      echo "    {}"
+    else
+      for annotation in "${INGRESS_ANNOTATIONS[@]}"; do
+        local key value
+        key="${annotation%%=*}"
+        value="${annotation#*=}"
+        printf '    %s: "%s"\n' "$key" "$value"
+      done
+    fi
+    if [[ -n "$TLS_SECRET_NAME" ]]; then
       echo "  tlsSecret: ${TLS_SECRET_NAME}"
     else
-      cat <<'EOF'
-  # tlsSecret: your-precreated-tls-secret
-EOF
+      echo "  # tlsSecret: your-precreated-tls-secret"
     fi
 
     cat <<EOF
@@ -403,6 +642,7 @@ install_ess_chart() {
 
 main() {
   parse_args "$@"
+  configure_ingress_settings
   ensure_dependencies
   ensure_gcloud_auth
   ensure_project
@@ -412,8 +652,17 @@ main() {
   configure_kubectl_context
   ensure_ingress_controller
   ensure_namespace
+  ensure_tls_secret
+  ensure_managed_certificate
   ensure_values_file
   install_ess_chart
+
+  local track_cmd
+  if [[ "$INGRESS_PROVIDER" == "nginx" ]]; then
+    track_cmd="kubectl get svc -n ${INGRESS_NAMESPACE} ${INGRESS_RELEASE_NAME}-ingress-nginx-controller -w"
+  else
+    track_cmd="kubectl get ingress -n ${NAMESPACE} -w"
+  fi
 
   cat <<EOF
 
@@ -426,8 +675,29 @@ Next steps:
       matrix.${DOMAIN}
       account.${DOMAIN}
       rtc.${DOMAIN}
-  * Provide a TLS secret via --tls-secret or edit ${VALUES_FILE} when ready (or use --disable-tls for HTTP).
-  * Track ingress IP with: kubectl get svc -n ${INGRESS_NAMESPACE} ${INGRESS_RELEASE_NAME}-ingress-nginx-controller -w
+EOF
+
+  if [[ -n "$TLS_SECRET_NAME" ]]; then
+    cat <<EOF
+  * Replace the TLS secret '${TLS_SECRET_NAME}' with production material when available (or rerun with --tls-secret).
+EOF
+  elif [[ "$INGRESS_PROVIDER" == "nginx" ]]; then
+    cat <<EOF
+  * A temporary self-signed TLS secret was created; replace it with production material when ready.
+EOF
+  fi
+
+  cat <<EOF
+  * Track ingress status with: ${track_cmd}
+EOF
+
+  if [[ "$GCP_MANAGED_CERT" == "true" ]]; then
+    cat <<EOF
+  * Google-managed certificate '${GCP_MANAGED_CERT_NAME}' is provisioning; it can take up to 15 minutes once DNS resolves.
+EOF
+  fi
+
+  cat <<'EOF'
 
 Re-run this script with updated options (e.g. --force-values, --domain, --tls-secret) to apply changes.
 EOF
