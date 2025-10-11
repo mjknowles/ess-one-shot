@@ -3,8 +3,8 @@ locals {
   cluster_name                 = "ess-one-shot-gke"
   vpc_network_name             = "default"
   cloudsql_instance_name       = "ess-matrix-postgres"
-  cloudsql_tier                = "db-custom-2-8192"
-  cloudsql_disk_size_gb        = 100
+  cloudsql_tier                = "db-custom-1-3840"
+  cloudsql_disk_size_gb        = 10
   cloudsql_availability_type   = "ZONAL"
   cloudsql_backup_start_time   = "03:00"
   cloudsql_deletion_protection = true
