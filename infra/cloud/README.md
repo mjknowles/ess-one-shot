@@ -13,30 +13,16 @@ Use this configuration to spin up an Autopilot GKE cluster, configure Google-man
 
 ### Configure once
 
-Create `infra/cloud/tofu.tfvars` with the required inputs, then override the optional knobs as needed for Cloud SQL sizing or CDC placement:
+Create `infra/cloud/tofu.tfvars` with the required inputs. The configuration pins regions, machine sizes, and identifiers so you only decide the basics:
 
 ```hcl
-project_id    = "ess-one-shot"
-domain        = "matrix.mjknowles.dev"
-dns_zone_name = "mjknowles-dev-zone"
-dns_project_id = "dns-infra"   # optional; defaults to project_id
-# region = "us-central1"            # optional override
-# vpc_network_name = "default"      # existing VPC shared by GKE + Cloud SQL
-
-# cloudsql_instance_name      = "ess-matrix-postgres"
-# cloudsql_tier               = "db-custom-2-8192"
-# cloudsql_disk_size_gb       = 100
-# cloudsql_availability_type  = "ZONAL"
-# cloudsql_backup_start_time  = "03:00"
-# cloudsql_deletion_protection = true
-# synapse_db_name             = "synapse"
-# synapse_db_user             = "synapse_app"
-# matrix_auth_db_name         = "mas"
-# matrix_auth_db_user         = "mas_app"
-# analytics_dataset_id        = "ess_matrix_cdc"
-# analytics_location          = "us-central1"
-# datastream_stream_id        = "ess-postgres-to-bq"
+project_id     = "ess-one-shot"
+domain         = "matrix.example.com"
+dns_zone_name  = "matrix-example-zone"
+# dns_project_id = "dns-infra-project"  # optional override when DNS lives elsewhere
 ```
+
+> Need a different region or machine size? Tweak the first `locals` block in `infra/cloud/main.tf`.
 
 ### Bootstrap remote state
 
@@ -55,7 +41,7 @@ The script creates (or validates) the GCS bucket, enables versioning, applies un
 
 ```bash
 
-# First run: create the GKE cluster so the Kubernetes provider has a live endpoint
+# First run: enable core APIs and stand up the GKE cluster
 tofu apply \
   -target=google_project_service.compute \
   -target=google_project_service.container \

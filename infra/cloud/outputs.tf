@@ -65,7 +65,7 @@ output "bigquery_dataset_id" {
 
 output "analytics_location" {
   description = "Region where the CDC (Datastream/BigQuery) resources reside."
-  value       = var.analytics_location
+  value       = local.analytics_location
 }
 
 output "datastream_stream_ids" {

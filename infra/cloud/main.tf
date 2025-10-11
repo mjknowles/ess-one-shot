@@ -1,4 +1,23 @@
 locals {
+  region                       = "us-central1"
+  cluster_name                 = "ess-one-shot-gke"
+  vpc_network_name             = "default"
+  cloudsql_instance_name       = "ess-matrix-postgres"
+  cloudsql_tier                = "db-custom-2-8192"
+  cloudsql_disk_size_gb        = 100
+  cloudsql_availability_type   = "ZONAL"
+  cloudsql_backup_start_time   = "03:00"
+  cloudsql_deletion_protection = true
+  synapse_db_name              = "synapse"
+  synapse_db_user              = "synapse_app"
+  matrix_auth_db_name          = "mas"
+  matrix_auth_db_user          = "mas_app"
+  analytics_dataset_id         = "ess_matrix_cdc"
+  analytics_location           = "us-central1"
+  datastream_stream_base       = "ess-postgres-to-bq"
+}
+
+locals {
   base_domain = trimsuffix(trimspace(var.domain), ".")
 
   hostnames = {
@@ -13,7 +32,7 @@ locals {
   static_ip_name           = "ess-ingress-ip"
   dns_project              = trimspace(var.dns_project_id) != "" ? trimspace(var.dns_project_id) : var.project_id
 
-  sanitized_instance_name      = regexreplace(lower(var.cloudsql_instance_name), "[^a-z0-9-]", "-")
+  sanitized_instance_name      = regexreplace(lower(local.cloudsql_instance_name), "[^a-z0-9-]", "-")
   cloudsql_private_range_name  = substr("${local.sanitized_instance_name}-ps-range", 0, 62)
   synapse_service_account_name = "synapse-db-client"
   mas_service_account_name     = "mas-db-client"
@@ -26,7 +45,7 @@ locals {
 
 provider "google" {
   project = var.project_id
-  region  = var.region
+  region  = local.region
 }
 
 data "google_client_config" "current" {}
@@ -86,13 +105,15 @@ resource "google_project_service" "bigquery" {
 }
 
 data "google_compute_network" "primary" {
-  name    = var.vpc_network_name
+  name    = local.vpc_network_name
   project = var.project_id
 }
 
 resource "google_compute_global_address" "ingress" {
   name    = local.static_ip_name
   project = var.project_id
+
+  depends_on = [google_project_service.compute]
 }
 
 resource "google_compute_global_address" "cloudsql_private_range" {
@@ -136,22 +157,22 @@ resource "random_password" "replication_user" {
 }
 
 resource "google_sql_database_instance" "ess" {
-  name             = var.cloudsql_instance_name
+  name             = local.cloudsql_instance_name
   project          = var.project_id
-  region           = var.region
+  region           = local.region
   database_version = "POSTGRES_15"
 
-  deletion_protection = var.cloudsql_deletion_protection
+  deletion_protection = local.cloudsql_deletion_protection
 
   settings {
-    tier              = var.cloudsql_tier
-    availability_type = upper(var.cloudsql_availability_type)
+    tier              = local.cloudsql_tier
+    availability_type = upper(local.cloudsql_availability_type)
     disk_type         = "PD_SSD"
-    disk_size         = var.cloudsql_disk_size_gb
+    disk_size         = local.cloudsql_disk_size_gb
 
     backup_configuration {
       enabled    = true
-      start_time = var.cloudsql_backup_start_time
+      start_time = local.cloudsql_backup_start_time
     }
 
     ip_configuration {
@@ -194,7 +215,7 @@ resource "google_sql_database_instance" "ess" {
 }
 
 resource "google_sql_database" "synapse" {
-  name      = var.synapse_db_name
+  name      = local.synapse_db_name
   instance  = google_sql_database_instance.ess.name
   project   = var.project_id
   charset   = "UTF8"
@@ -202,7 +223,7 @@ resource "google_sql_database" "synapse" {
 }
 
 resource "google_sql_database" "matrix_auth" {
-  name      = var.matrix_auth_db_name
+  name      = local.matrix_auth_db_name
   instance  = google_sql_database_instance.ess.name
   project   = var.project_id
   charset   = "UTF8"
@@ -210,14 +231,14 @@ resource "google_sql_database" "matrix_auth" {
 }
 
 resource "google_sql_user" "synapse" {
-  name     = var.synapse_db_user
+  name     = local.synapse_db_user
   instance = google_sql_database_instance.ess.name
   project  = var.project_id
   password = random_password.synapse_db_user.result
 }
 
 resource "google_sql_user" "matrix_auth" {
-  name     = var.matrix_auth_db_user
+  name     = local.matrix_auth_db_user
   instance = google_sql_database_instance.ess.name
   project  = var.project_id
   password = random_password.matrix_auth_db_user.result
@@ -231,9 +252,9 @@ resource "google_sql_user" "replication" {
 }
 
 resource "google_container_cluster" "autopilot" {
-  name     = var.cluster_name
+  name     = local.cluster_name
   project  = var.project_id
-  location = var.region
+  location = local.region
 
   enable_autopilot = true
 
@@ -324,9 +345,9 @@ resource "kubernetes_secret" "synapse_db" {
   type = "Opaque"
 
   data = {
-    username = var.synapse_db_user
+    username = local.synapse_db_user
     password = random_password.synapse_db_user.result
-    database = var.synapse_db_name
+    database = local.synapse_db_name
     host     = google_sql_database_instance.ess.private_ip_address
     port     = "5432"
   }
@@ -346,9 +367,9 @@ resource "kubernetes_secret" "matrix_auth_db" {
   type = "Opaque"
 
   data = {
-    username = var.matrix_auth_db_user
+    username = local.matrix_auth_db_user
     password = random_password.matrix_auth_db_user.result
-    database = var.matrix_auth_db_name
+    database = local.matrix_auth_db_name
     host     = google_sql_database_instance.ess.private_ip_address
     port     = "5432"
   }
@@ -382,9 +403,9 @@ resource "google_service_account_iam_member" "matrix_auth_workload_identity" {
 }
 
 resource "google_bigquery_dataset" "cdc" {
-  dataset_id                  = var.analytics_dataset_id
+  dataset_id                  = local.analytics_dataset_id
   project                     = var.project_id
-  location                    = var.analytics_location
+  location                    = local.analytics_location
   delete_contents_on_destroy  = false
   default_table_expiration_ms = null
 
@@ -395,13 +416,13 @@ locals {
   datastream_synapse_profile_id  = substr("${local.sanitized_instance_name}-synapse-src", 0, 63)
   datastream_mas_profile_id      = substr("${local.sanitized_instance_name}-mas-src", 0, 63)
   datastream_bigquery_profile_id = substr("${local.sanitized_instance_name}-bq-dest", 0, 63)
-  datastream_synapse_stream_id   = substr("${var.datastream_stream_id}-synapse", 0, 63)
-  datastream_mas_stream_id       = substr("${var.datastream_stream_id}-mas", 0, 63)
+  datastream_synapse_stream_id   = substr("${local.datastream_stream_base}-synapse", 0, 63)
+  datastream_mas_stream_id       = substr("${local.datastream_stream_base}-mas", 0, 63)
 }
 
 resource "google_datastream_connection_profile" "postgres_synapse" {
   create_without_validation = true
-  location                  = var.analytics_location
+  location                  = local.analytics_location
   project                   = var.project_id
   connection_profile_id     = local.datastream_synapse_profile_id
   display_name              = "ESS Synapse PostgreSQL"
@@ -411,7 +432,7 @@ resource "google_datastream_connection_profile" "postgres_synapse" {
     port     = 5432
     username = local.replication_user_name
     password = random_password.replication_user.result
-    database = var.synapse_db_name
+    database = local.synapse_db_name
   }
 
   depends_on = [
@@ -422,7 +443,7 @@ resource "google_datastream_connection_profile" "postgres_synapse" {
 
 resource "google_datastream_connection_profile" "postgres_mas" {
   create_without_validation = true
-  location                  = var.analytics_location
+  location                  = local.analytics_location
   project                   = var.project_id
   connection_profile_id     = local.datastream_mas_profile_id
   display_name              = "ESS MAS PostgreSQL"
@@ -432,7 +453,7 @@ resource "google_datastream_connection_profile" "postgres_mas" {
     port     = 5432
     username = local.replication_user_name
     password = random_password.replication_user.result
-    database = var.matrix_auth_db_name
+    database = local.matrix_auth_db_name
   }
 
   depends_on = [
@@ -443,7 +464,7 @@ resource "google_datastream_connection_profile" "postgres_mas" {
 
 resource "google_datastream_connection_profile" "bigquery" {
   create_without_validation = true
-  location                  = var.analytics_location
+  location                  = local.analytics_location
   project                   = var.project_id
   connection_profile_id     = local.datastream_bigquery_profile_id
   display_name              = "ESS BigQuery"
@@ -455,7 +476,7 @@ resource "google_datastream_connection_profile" "bigquery" {
 
 resource "google_datastream_stream" "synapse" {
   create_without_validation = true
-  location                  = var.analytics_location
+  location                  = local.analytics_location
   project                   = var.project_id
   stream_id                 = local.datastream_synapse_stream_id
   display_name              = "Synapse to BigQuery"
@@ -465,8 +486,8 @@ resource "google_datastream_stream" "synapse" {
     source_connection_profile = google_datastream_connection_profile.postgres_synapse.name
 
     postgresql_source_config {
-      publication      = "${local.datastream_publication}_${var.synapse_db_name}"
-      replication_slot = "${local.datastream_replication_slot}_${var.synapse_db_name}"
+      publication      = "${local.datastream_publication}_${local.synapse_db_name}"
+      replication_slot = "${local.datastream_replication_slot}_${local.synapse_db_name}"
     }
   }
 
@@ -490,7 +511,7 @@ resource "google_datastream_stream" "synapse" {
 
 resource "google_datastream_stream" "matrix_auth" {
   create_without_validation = true
-  location                  = var.analytics_location
+  location                  = local.analytics_location
   project                   = var.project_id
   stream_id                 = local.datastream_mas_stream_id
   display_name              = "MAS to BigQuery"
@@ -500,8 +521,8 @@ resource "google_datastream_stream" "matrix_auth" {
     source_connection_profile = google_datastream_connection_profile.postgres_mas.name
 
     postgresql_source_config {
-      publication      = "${local.datastream_publication}_${var.matrix_auth_db_name}"
-      replication_slot = "${local.datastream_replication_slot}_${var.matrix_auth_db_name}"
+      publication      = "${local.datastream_publication}_${local.matrix_auth_db_name}"
+      replication_slot = "${local.datastream_replication_slot}_${local.matrix_auth_db_name}"
     }
   }
 
@@ -578,8 +599,8 @@ locals {
       postgres = {
         host     = local.cloudsql_postgres.host
         port     = local.cloudsql_postgres.port
-        user     = var.matrix_auth_db_user
-        database = var.matrix_auth_db_name
+        user     = local.matrix_auth_db_user
+        database = local.matrix_auth_db_name
         sslMode  = "require"
         password = {
           secret    = kubernetes_secret.matrix_auth_db.metadata[0].name
@@ -600,8 +621,8 @@ locals {
       postgres = {
         host     = local.cloudsql_postgres.host
         port     = local.cloudsql_postgres.port
-        user     = var.synapse_db_user
-        database = var.synapse_db_name
+        user     = local.synapse_db_user
+        database = local.synapse_db_name
         sslMode  = "require"
         password = {
           secret    = kubernetes_secret.synapse_db.metadata[0].name
