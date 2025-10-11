@@ -17,9 +17,9 @@ Create `infra/cloud/tofu.tfvars` with the required inputs. The configuration pin
 
 ```hcl
 project_id     = "ess-one-shot"
-domain         = "matrix.example.com"
-dns_zone_name  = "matrix-example-zone"
-# dns_project_id = "dns-infra-project"  # optional override when DNS lives elsewhere
+domain         = "matrix.mjknowles.dev"
+dns_zone_name  = "mjknowles-dev-zone"
+# dns_project_id = "dns-infra-474704"  # optional override when DNS lives elsewhere
 ```
 
 > Need a different region or machine size? Tweak the first `locals` block in `infra/cloud/main.tf`.

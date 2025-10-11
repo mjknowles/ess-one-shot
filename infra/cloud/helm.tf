@@ -1,0 +1,111 @@
+locals {
+  ingress_annotations = {
+    "networking.gke.io/managed-certificates"      = local.managed_certificate_name
+    "kubernetes.io/ingress.global-static-ip-name" = google_compute_global_address.ingress.name
+  }
+
+  cloudsql_postgres = {
+    host = google_sql_database_instance.ess.private_ip_address
+    port = 5432
+  }
+
+  synapse_service_account_block = {
+    create = true
+    name   = local.synapse_service_account_name
+    annotations = {
+      "iam.gke.io/gcp-service-account" = google_service_account.synapse.email
+    }
+  }
+
+  matrix_auth_service_account_block = {
+    create = true
+    name   = local.mas_service_account_name
+    annotations = {
+      "iam.gke.io/gcp-service-account" = google_service_account.matrix_auth.email
+    }
+  }
+
+  ess_values = {
+    postgres = {
+      enabled = false
+    }
+    ingress = {
+      className      = "gce"
+      controllerType = null
+      tlsEnabled     = true
+      annotations    = local.ingress_annotations
+    }
+    serverName = local.base_domain
+    elementAdmin = {
+      ingress = {
+        host = local.hostnames.admin
+      }
+    }
+    elementWeb = {
+      ingress = {
+        host = local.hostnames.chat
+      }
+    }
+    matrixAuthenticationService = {
+      ingress = {
+        host = local.hostnames.account
+      }
+      postgres = {
+        host     = local.cloudsql_postgres.host
+        port     = local.cloudsql_postgres.port
+        user     = local.matrix_auth_db_user
+        database = local.matrix_auth_db_name
+        sslMode  = "require"
+        password = {
+          secret    = kubernetes_secret.matrix_auth_db.metadata[0].name
+          secretKey = "password"
+        }
+      }
+      serviceAccount = local.matrix_auth_service_account_block
+    }
+    matrixRTC = {
+      ingress = {
+        host = local.hostnames.rtc
+      }
+    }
+    synapse = {
+      ingress = {
+        host = local.hostnames.matrix
+      }
+      postgres = {
+        host     = local.cloudsql_postgres.host
+        port     = local.cloudsql_postgres.port
+        user     = local.synapse_db_user
+        database = local.synapse_db_name
+        sslMode  = "require"
+        password = {
+          secret    = kubernetes_secret.synapse_db.metadata[0].name
+          secretKey = "password"
+        }
+      }
+      serviceAccount = local.synapse_service_account_block
+    }
+  }
+}
+
+resource "helm_release" "ess" {
+  name       = "ess"
+  repository = "oci://ghcr.io/element-hq/ess-helm"
+  chart      = "matrix-stack"
+  namespace  = kubernetes_namespace.ess.metadata[0].name
+
+  create_namespace = false
+  cleanup_on_fail  = true
+  wait             = true
+
+  values = [
+    yamlencode(local.ess_values)
+  ]
+
+  depends_on = [
+    kubernetes_manifest.managed_certificate,
+    google_compute_global_address.ingress,
+    kubernetes_secret.synapse_db,
+    kubernetes_secret.matrix_auth_db
+  ]
+}
