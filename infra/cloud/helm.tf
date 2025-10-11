@@ -31,7 +31,6 @@ locals {
     }
     ingress = {
       className      = "gce"
-      controllerType = null
       tlsEnabled     = true
       annotations    = local.ingress_annotations
     }
