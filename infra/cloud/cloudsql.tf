@@ -37,7 +37,7 @@ resource "google_sql_database_instance" "ess" {
 
     ip_configuration {
       ipv4_enabled                                  = false
-      private_network                               = data.google_compute_network.primary.id
+      private_network                               = google_compute_network.primary.id
       enable_private_path_for_google_cloud_services = true
     }
 

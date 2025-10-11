@@ -102,13 +102,23 @@ Monitor `kubectl get ingress -n ess -w` until the IP shows up and watch the mana
 
 3. **Validate BigQuery objects.** The dataset configured via `analytics_dataset_id` receives tables per source schema. Query a few tables (for example `SELECT COUNT(*) ...`) to confirm change events arrive.
 
-### Cleanup
+### Teardown
 
-```bash
-tofu destroy -var-file=tofu.tfvars
-```
+1. Remove the chart (and any other Kubernetes resources that rely on the cluster) while the cluster is still healthy:
 
-This tears down the Helm release, DNS records, Cloud SQL instance, Datastream connection profiles/streams, the BigQuery dataset, and the Autopilot cluster. BigQuery tables populated by Datastream are not deleted automatically; remove them manually if desired.
+   ```bash
+   tofu destroy -target=helm_release.ess -var-file=tofu.tfvars
+   ```
+
+2. Destroy the remaining infrastructure, including the Autopilot cluster, Cloud SQL, Datastream, Service Networking peering, and DNS records:
+
+   ```bash
+   tofu destroy -var-file=tofu.tfvars
+   ```
+
+3. If anything has to be deleted manually in the console, run `tofu state rm <address>` afterwards so state stays in sync.
+
+BigQuery tables populated by Datastream are not deleted automatically; remove them manually if desired.
 
 ### Infracost
 

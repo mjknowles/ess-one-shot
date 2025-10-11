@@ -1,7 +1,13 @@
 locals {
   region                       = "us-central1"
   cluster_name                 = "ess-one-shot-gke"
-  vpc_network_name             = "default"
+  vpc_network_name             = "ess-one-shot-vpc"
+  subnetwork_name              = "ess-one-shot-subnet"
+  subnetwork_ip_cidr_range     = "10.10.0.0/20"
+  pods_secondary_range_name    = "ess-one-shot-pods"
+  pods_secondary_cidr_range    = "10.20.0.0/16"
+  services_secondary_range_name = "ess-one-shot-services"
+  services_secondary_cidr_range = "10.30.0.0/20"
   cloudsql_instance_name       = "ess-matrix-postgres"
   cloudsql_tier                = "db-custom-1-3840"
   cloudsql_disk_size_gb        = 10

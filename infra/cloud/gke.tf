@@ -5,6 +5,13 @@ resource "google_container_cluster" "autopilot" {
 
   enable_autopilot = true
   deletion_protection = false
+  network             = google_compute_network.primary.id
+  subnetwork          = google_compute_subnetwork.primary.id
+
+  ip_allocation_policy {
+    cluster_secondary_range_name  = local.pods_secondary_range_name
+    services_secondary_range_name = local.services_secondary_range_name
+  }
 
   depends_on = [
     google_project_service.compute,
