@@ -62,10 +62,6 @@ resource "google_sql_database_instance" "ess" {
       value = "10"
     }
 
-    database_flags {
-      name  = "wal_keep_size"
-      value = "2048"
-    }
   }
 
   depends_on = [
