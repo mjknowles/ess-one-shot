@@ -33,9 +33,6 @@ locals {
       className      = "gce"
       tlsEnabled     = true
       annotations    = local.ingress_annotations
-      service = {
-        type = "NodePort"
-      }
     }
     serverName = local.base_domain
     elementAdmin = {
