@@ -16,7 +16,7 @@ Create `infra/cloud/tofu.tfvars` with the project and DNS details:
 
 ```hcl
 project_id     = "ess-one-shot"
-domain         = "matrix.mjknowles.dev"
+domain         = "mjknowles.dev"
 dns_zone_name  = "mjknowles-dev-zone"
 # dns_project_id = "dns-infra-474704"  # set only if the DNS zone lives in another project
 ```
@@ -46,7 +46,7 @@ tofu apply \
 
 # Full rollout for everything else
 tofu plan -var-file=tofu.tfvars
-tofu apply -var-file=tofu.tfvars
+tofu apply -var-file=tofu.tfvars -auto-approve
 ```
 
 Wait for the command to finish; DNS records and the managed certificate become active once propagation completes. Use `kubectl get ingress -n ess -w` to watch for the external IP.
