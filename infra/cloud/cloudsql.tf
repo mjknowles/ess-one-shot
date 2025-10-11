@@ -75,7 +75,7 @@ resource "google_sql_database" "synapse" {
   instance  = google_sql_database_instance.ess.name
   project   = var.project_id
   charset   = "UTF8"
-  collation = "C"
+  collation = "en_US.UTF8"
 }
 
 resource "google_sql_database" "matrix_auth" {

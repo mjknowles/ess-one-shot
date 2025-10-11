@@ -1,30 +1,27 @@
-## GCP (GKE) Deployment with OpenTofu
+# GCP Quickstart
 
-Use this configuration to spin up an Autopilot GKE cluster, configure Google-managed HTTPS ingress, provision Cloud SQL for PostgreSQL, and deploy the Element Server Suite with BigQuery-ready CDC via Datastream in a single apply.
+Follow these steps to bring the Element Server Suite online on GKE Autopilot with Cloud SQL and Datastream.
 
-### Prerequisites
+## Prerequisites
 
 - [OpenTofu 1.6+](https://opentofu.org/)
-- [Google Cloud CLI](https://cloud.google.com/sdk/docs/install) authenticated for your project (`gcloud auth application-default login` or a service-account key in `GOOGLE_APPLICATION_CREDENTIALS`)
-- IAM permissions to enable `compute.googleapis.com`, `container.googleapis.com`, `servicenetworking.googleapis.com`, `sqladmin.googleapis.com`, `secretmanager.googleapis.com`, `datastream.googleapis.com`, and `bigquery.googleapis.com`
-- Project-level rights to create/modify Cloud SQL instances, BigQuery datasets, Datastream streams, GCP service accounts, and Kubernetes secrets
-- [Helm 3.8+](https://helm.sh/) (required by the Helm provider)
-- A Cloud DNS managed zone that serves the domain or subdomain you’ll dedicate to ESS (delegated NS records already in place)
+- [Google Cloud CLI](https://cloud.google.com/sdk/docs/install) with `gcloud auth application-default login` (or a service-account key exported in `GOOGLE_APPLICATION_CREDENTIALS`)
+- [Helm 3.8+](https://helm.sh/)
+- IAM access to create/modify GKE, Cloud SQL, Datastream, BigQuery, DNS, and Secret Manager resources in the target project
+- A Cloud DNS managed zone that already serves the domain or subdomain you plan to dedicate to ESS
 
-### Configure once
+## 1. Set your inputs
 
-Create `infra/cloud/tofu.tfvars` with the required inputs. The configuration pins regions, machine sizes, and identifiers so you only decide the basics:
+Create `infra/cloud/tofu.tfvars` with the project and DNS details:
 
 ```hcl
 project_id     = "ess-one-shot"
 domain         = "matrix.mjknowles.dev"
 dns_zone_name  = "mjknowles-dev-zone"
-# dns_project_id = "dns-infra-474704"  # optional override when DNS lives elsewhere
+# dns_project_id = "dns-infra-474704"  # set only if the DNS zone lives in another project
 ```
 
-> Need a different region or machine size? Tweak the first `locals` block in `infra/cloud/main.tf`.
-
-### Bootstrap remote state
+## 2. Initialize remote state
 
 ```bash
 ./init-remote-state.sh \
@@ -35,94 +32,85 @@ dns_zone_name  = "mjknowles-dev-zone"
 tofu init -backend-config=backend.hcl
 ```
 
-The script creates (or validates) the GCS bucket, enables versioning, applies uniform bucket-level access, and writes `backend.hcl` with the supplied settings. Pass `--state-admin you@example.com` or a service account email to grant bucket access for OpenTofu.
+Run with your project, bucket, and region; add `--state-admin you@example.com` if someone else needs access to the bucket.
 
-### Deploy
+## 3. Deploy
 
 ```bash
-
-# First run: enable core APIs and stand up the GKE cluster
+# One-time: enable core APIs and create the Autopilot cluster
 tofu apply \
   -target=google_project_service.compute \
   -target=google_project_service.container \
   -target=google_container_cluster.autopilot \
   -var-file=tofu.tfvars
 
-# After the cluster exists you can plan/apply the rest
+# Full rollout for everything else
 tofu plan -var-file=tofu.tfvars
 tofu apply -var-file=tofu.tfvars
 ```
 
-During `apply` OpenTofu enables the required APIs, creates an Autopilot cluster, reserves a global static IP, provisions a Google-managed certificate, builds a private Cloud SQL for PostgreSQL instance (with `synapse`/`mas` databases plus per-service users), writes Kubernetes secrets that surface those credentials to the chart, binds Workload Identity service accounts, installs the ESS Helm release with `postgres.enabled=false`, creates the BigQuery dataset, and seeds Datastream connection profiles/streams (created in the paused `NOT_STARTED` state so you can verify connectivity). DNS records (in `dns_project_id` when provided) are published for:
+Wait for the command to finish; DNS records and the managed certificate become active once propagation completes. Use `kubectl get ingress -n ess -w` to watch for the external IP.
 
-- `chat.${domain}`
-- `admin.${domain}`
-- `matrix.${domain}`
-- `account.${domain}`
-- `rtc.${domain}`
-
-All five hostnames share the reserved static IP, so as soon as DNS propagates the ManagedCertificate will transition to `Active` (typically within 15 minutes).
-
-Monitor `kubectl get ingress -n ess -w` until the IP shows up and watch the managed certificate become `Active`. Run `tofu output` to capture the Cloud SQL connection information, generated service account emails, Kubernetes secret names, and Datastream stream IDs for follow-up tasks.
-
-### Post-deploy database + CDC checklist
-
-1. **Grant replication privileges once.** Connect as the `postgres` admin (for example `gcloud sql connect ${CLOUDSQL_INSTANCE} --user=postgres --project ${PROJECT_ID}`) and run:
-
-   ```sql
-   ALTER ROLE datastream_replica WITH REPLICATION;
-   GRANT CONNECT ON DATABASE synapse TO datastream_replica;
-   GRANT CONNECT ON DATABASE mas TO datastream_replica;
-   GRANT USAGE ON SCHEMA public TO datastream_replica;
-   GRANT SELECT ON ALL TABLES IN SCHEMA public TO datastream_replica;
-   ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO datastream_replica;
-   ```
-
-   Repeat the `GRANT` statements for any additional schemas the applications create (e.g. `synapse_main`, `mas_public`). This is only required after the initial deployment or when new schemas are added.
-
-2. **Start Datastream ingestion.** Streams launch in `NOT_STARTED`. After validating database grants, start them:
-
-   ```bash
-   ANALYTICS_LOC="$(tofu output -raw analytics_location)"
-
-   gcloud datastream streams update "$(tofu output -json datastream_stream_ids | jq -r '.synapse')" \
-     --location "${ANALYTICS_LOC}" \
-     --desired-state=RUNNING \
-     --project "${PROJECT_ID}"
-
-   gcloud datastream streams update "$(tofu output -json datastream_stream_ids | jq -r '.mas')" \
-     --location "${ANALYTICS_LOC}" \
-     --desired-state=RUNNING \
-     --project "${PROJECT_ID}"
-   ```
-
-   > Datastream needs private connectivity to reach the Cloud SQL private IP. If you have not yet approved a Private Service Connect or VPC peering attachment for Datastream, create it first (the streams were created with `create_without_validation = true`, so you can fill in the networking pieces before turning them on).
-
-   Monitor `gcloud datastream streams describe ... --location ...` for `state: RUNNING` and confirm the initial snapshot completes.
-
-3. **Validate BigQuery objects.** The dataset configured via `analytics_dataset_id` receives tables per source schema. Query a few tables (for example `SELECT COUNT(*) ...`) to confirm change events arrive.
-
-### Teardown
-
-1. Remove the chart (and any other Kubernetes resources that rely on the cluster) while the cluster is still healthy:
-
-   ```bash
-   tofu destroy -target=helm_release.ess -var-file=tofu.tfvars
-   ```
-
-2. Destroy the remaining infrastructure, including the Autopilot cluster, Cloud SQL, Datastream, Service Networking peering, and DNS records:
-
-   ```bash
-   tofu destroy -var-file=tofu.tfvars
-   ```
-
-3. If anything has to be deleted manually in the console, run `tofu state rm <address>` afterwards so state stays in sync.
-
-BigQuery tables populated by Datastream are not deleted automatically; remove them manually if desired.
-
-### Infracost
+Configure your kubeconfig as soon as the Autopilot cluster is created (no need to wait for the full `tofu apply` to finish):
 
 ```bash
-# Terraform variables can be set using --terraform-var-file or --terraform-var
-infracost breakdown --path .
+PROJECT_ID="ess-one-shot"  # replace with the same project_id you set in tofu.tfvars
+
+gcloud container clusters get-credentials "ess-one-shot-gke" \
+  --region "us-central1" \
+  --project "${PROJECT_ID}"
 ```
+
+Update the cluster name or region if you customized them in `infra/cloud/locals.tf`. `kubectl config current-context` should now point at the Autopilot cluster so you can tail Helm resources immediately.
+
+## 4. After apply
+
+- Capture the outputs you need for follow-up tasks: `tofu output`.
+- Grant Datastream access to Cloud SQL (run once as the `postgres` user):
+
+  ```sql
+  ALTER ROLE datastream_replica WITH REPLICATION;
+  GRANT CONNECT ON DATABASE synapse TO datastream_replica;
+  GRANT CONNECT ON DATABASE mas TO datastream_replica;
+  GRANT USAGE ON SCHEMA public TO datastream_replica;
+  GRANT SELECT ON ALL TABLES IN SCHEMA public TO datastream_replica;
+  ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO datastream_replica;
+  ```
+
+- Start the Datastream jobs after the grants succeed:
+
+  ```bash
+  ANALYTICS_LOC="$(tofu output -raw analytics_location)"
+
+  gcloud datastream streams update "$(tofu output -json datastream_stream_ids | jq -r '.synapse')" \
+    --location "${ANALYTICS_LOC}" \
+    --desired-state=RUNNING \
+    --project "${PROJECT_ID}"
+
+  gcloud datastream streams update "$(tofu output -json datastream_stream_ids | jq -r '.mas')" \
+    --location "${ANALYTICS_LOC}" \
+    --desired-state=RUNNING \
+    --project "${PROJECT_ID}"
+  ```
+
+- Confirm BigQuery tables are receiving data from Datastream when the streams report `state: RUNNING`.
+
+## 5. Tear down (when you are done)
+
+```bash
+tofu destroy -target=helm_release.ess -var-file=tofu.tfvars
+tofu destroy -var-file=tofu.tfvars
+```
+
+Remove any leftover Cloud SQL data or BigQuery tables manually if you no longer need them.
+
+## Troubleshooting Helm Deploy
+
+The playbook:
+
+- Let the original tofu apply finish or fail. If Helm gets wedged and needs tearing down, run `tofu destroy -target=helm_release.ess -var-file=tofu.tfvars` so Terraform records the delete, instead of helm uninstall.
+- After fixing the chart values, rerun the full `tofu apply -var-file=tofu.tfvars -auto-approve`; Terraform will reinstall the
+  release cleanly.
+- If you do ever remove something manually, immediately reconcile state (tofu state rm helm_release.ess or rerun destroy)
+  so Terraform isn’t left holding a pointer to something that’s gone.
+- `helm uninstall ess -n ess`

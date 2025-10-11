@@ -83,6 +83,14 @@ locals {
         }
       }
       serviceAccount = local.synapse_service_account_block
+      additional = {
+        "00-allow-unsafe-locale" = {
+          config = <<-EOT
+database:
+  allow_unsafe_locale: true
+EOT
+        }
+      }
     }
   }
 }

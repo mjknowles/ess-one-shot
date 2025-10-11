@@ -44,7 +44,8 @@ resource "kubernetes_secret" "synapse_db" {
 
   depends_on = [
     kubernetes_namespace.ess,
-    google_sql_user.synapse
+    google_sql_user.synapse,
+    google_sql_database.synapse
   ]
 }
 
