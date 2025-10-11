@@ -49,7 +49,7 @@ tofu plan -var-file=tofu.tfvars
 tofu apply -var-file=tofu.tfvars -auto-approve
 ```
 
-Wait for the command to finish; DNS records and the managed certificate become active once propagation completes. Use `kubectl get ingress -n ess -w` to watch for the external IP.
+Wait for the command to finish. The global HTTPS load balancer will claim the reserved static IP, Terraform will publish DNS records for both traffic and ACME validation, and Certificate Manager will provision the TLS certificate. Use `kubectl get ingress -n ess -w` to watch for the load-balancer status.
 
 Configure your kubeconfig as soon as the Autopilot cluster is created (no need to wait for the full `tofu apply` to finish):
 
@@ -66,6 +66,7 @@ Update the cluster name or region if you customized them in `infra/cloud/locals.
 ## 4. After apply
 
 - Capture the outputs you need for follow-up tasks: `tofu output`.
+- TLS is provisioned automatically by Certificate Manager. Wait for the certificate to reach the `ACTIVE` state (`gcloud certificate-manager certificates describe ...`) before distributing endpoints externally.
 - Grant Datastream access to Cloud SQL (run once as the `postgres` user):
 
   ```sql

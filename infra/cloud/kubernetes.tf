@@ -4,22 +4,18 @@ resource "kubernetes_namespace" "ess" {
   }
 }
 
-resource "kubernetes_manifest" "managed_certificate" {
+resource "kubernetes_manifest" "frontend_config" {
   manifest = {
-    apiVersion = "networking.gke.io/v1"
-    kind       = "ManagedCertificate"
+    apiVersion = "networking.gke.io/v1beta1"
+    kind       = "FrontendConfig"
     metadata = {
-      name      = local.managed_certificate_name
+      name      = local.frontend_config_name
       namespace = kubernetes_namespace.ess.metadata[0].name
     }
     spec = {
-      domains = [
-        local.hostnames.chat,
-        local.hostnames.admin,
-        local.hostnames.matrix,
-        local.hostnames.account,
-        local.hostnames.rtc,
-      ]
+      redirectToHttps = {
+        enabled = true
+      }
     }
   }
 

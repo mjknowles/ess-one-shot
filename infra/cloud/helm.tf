@@ -1,7 +1,8 @@
 locals {
   ingress_annotations = {
-    "networking.gke.io/managed-certificates"      = local.managed_certificate_name
     "kubernetes.io/ingress.global-static-ip-name" = google_compute_global_address.ingress.name
+    "networking.gke.io/certmap"                   = google_certificate_manager_certificate_map.ess.id
+    "networking.gke.io/v1beta1.FrontendConfig"    = kubernetes_manifest.frontend_config.manifest.metadata.name
   }
 
   cloudsql_postgres = {
@@ -30,9 +31,9 @@ locals {
       enabled = false
     }
     ingress = {
-      className      = "gce"
-      tlsEnabled     = true
-      annotations    = local.ingress_annotations
+      className   = "gce"
+      tlsEnabled  = false
+      annotations = local.ingress_annotations
     }
     serverName = local.base_domain
     elementAdmin = {
@@ -110,8 +111,9 @@ resource "helm_release" "ess" {
   ]
 
   depends_on = [
-    kubernetes_manifest.managed_certificate,
+    google_certificate_manager_certificate_map_entry.ess,
     google_compute_global_address.ingress,
+    kubernetes_manifest.frontend_config,
     kubernetes_secret.synapse_db,
     kubernetes_secret.matrix_auth_db
   ]

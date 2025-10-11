@@ -13,13 +13,8 @@ output "ess_namespace" {
   value       = kubernetes_namespace.ess.metadata[0].name
 }
 
-output "managed_certificate_name" {
-  description = "ManagedCertificate resource that fronts the public HTTPS endpoints."
-  value       = kubernetes_manifest.managed_certificate.manifest.metadata.name
-}
-
 output "ingress_ip_address" {
-  description = "Global static IP assigned to the HTTPS load balancer."
+  description = "Global static IP address assigned to the HTTPS load balancer."
   value       = google_compute_global_address.ingress.address
 }
 

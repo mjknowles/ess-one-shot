@@ -3,7 +3,7 @@ resource "google_container_cluster" "autopilot" {
   project  = var.project_id
   location = local.region
 
-  enable_autopilot = true
+  enable_autopilot    = true
   deletion_protection = false
   network             = google_compute_network.primary.id
   subnetwork          = google_compute_subnetwork.primary.id
