@@ -7,7 +7,7 @@ locals {
   cloudsql_disk_size_gb        = 10
   cloudsql_availability_type   = "ZONAL"
   cloudsql_backup_start_time   = "03:00"
-  cloudsql_deletion_protection = true
+  cloudsql_deletion_protection = false
   synapse_db_name              = "synapse"
   synapse_db_user              = "synapse_app"
   matrix_auth_db_name          = "mas"

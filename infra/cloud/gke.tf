@@ -4,6 +4,7 @@ resource "google_container_cluster" "autopilot" {
   location = local.region
 
   enable_autopilot = true
+  deletion_protection = false
 
   depends_on = [
     google_project_service.compute,
