@@ -53,6 +53,96 @@ output "matrix_auth_service_account_email" {
   value       = google_service_account.matrix_auth.email
 }
 
+output "base_domain" {
+  description = "Base domain used for ingress hostnames."
+  value       = local.base_domain
+}
+
+output "acme_email" {
+  description = "ACME contact email for Let's Encrypt."
+  value       = var.acme_email
+}
+
+output "dns_project_id" {
+  description = "Project that owns the Cloud DNS managed zone."
+  value       = local.dns_project
+}
+
+output "dns_zone_name" {
+  description = "Cloud DNS managed zone name."
+  value       = data.google_dns_managed_zone.ess.name
+}
+
+output "cert_manager_namespace" {
+  description = "Namespace used for cert-manager components."
+  value       = local.cert_manager_namespace
+}
+
+output "cert_manager_service_account_name" {
+  description = "Kubernetes service account name for cert-manager."
+  value       = local.cert_manager_service_account_name
+}
+
+output "cert_manager_service_account_email" {
+  description = "GCP service account annotated onto the cert-manager service account."
+  value       = google_service_account.cert_manager.email
+}
+
+output "cert_manager_cluster_issuer_name" {
+  description = "Name of the ClusterIssuer used for Let's Encrypt."
+  value       = local.cert_manager_cluster_issuer_name
+}
+
+output "cert_manager_cluster_issuer_secret_name" {
+  description = "Secret that stores the ACME account private key."
+  value       = local.cert_manager_cluster_issuer_secret_name
+}
+
+output "ingress_tls_secret_name" {
+  description = "Secret that stores the wildcard TLS certificate."
+  value       = local.ingress_tls_secret_name
+}
+
+output "ingress_tls_certificate_name" {
+  description = "Name of the cert-manager Certificate resource."
+  value       = local.ingress_tls_certificate_name
+}
+
+output "ingress_tls_dns_names" {
+  description = "DNS names covered by the wildcard TLS certificate."
+  value       = local.ingress_tls_dns_names
+}
+
+output "synapse_service_account_name" {
+  description = "Kubernetes service account name for Synapse."
+  value       = local.synapse_service_account_name
+}
+
+output "matrix_auth_service_account_name" {
+  description = "Kubernetes service account name for MAS."
+  value       = local.mas_service_account_name
+}
+
+output "synapse_database_user" {
+  description = "Database user name for Synapse."
+  value       = local.synapse_db_user
+}
+
+output "synapse_database_name" {
+  description = "Database name for Synapse."
+  value       = local.synapse_db_name
+}
+
+output "matrix_auth_database_user" {
+  description = "Database user name for MAS."
+  value       = local.matrix_auth_db_user
+}
+
+output "matrix_auth_database_name" {
+  description = "Database name for MAS."
+  value       = local.matrix_auth_db_name
+}
+
 output "bigquery_dataset_id" {
   description = "Dataset that receives Datastream change data capture output."
   value       = google_bigquery_dataset.cdc.id

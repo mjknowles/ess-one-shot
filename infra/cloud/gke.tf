@@ -30,11 +30,3 @@ provider "kubernetes" {
   token                  = data.google_client_config.current.access_token
   cluster_ca_certificate = local.cluster_ca
 }
-
-provider "helm" {
-  kubernetes = {
-    host                   = local.cluster_endpoint
-    token                  = data.google_client_config.current.access_token
-    cluster_ca_certificate = local.cluster_ca
-  }
-}

@@ -35,7 +35,7 @@ tofu init -backend-config=backend.hcl
 
 Run with your project, bucket, and region; add `--state-admin you@example.com` if someone else needs access to the bucket.
 
-## 3. Deploy
+## 3. Apply the infrastructure
 
 ```bash
 # One-time: enable core APIs and create the Autopilot cluster
@@ -45,17 +45,12 @@ tofu apply \
   -target=google_container_cluster.autopilot \
   -var-file=tofu.tfvars -auto-approve
 
-# One-time: create CRDs
-tofu apply -target=helm_release.cert_manager -var-file=tofu.tfvars -auto-approve
-# If it times out
-tofu apply -target=helm_release.cert_manager -var-file=tofu.tfvars -auto-approve -refresh-only
-
 # Full rollout for everything else
 tofu plan -var-file=tofu.tfvars
 tofu apply -var-file=tofu.tfvars -auto-approve
 ```
 
-Wait for the command to finish. Terraform will reserve the ingress IP, publish DNS for your ESS subdomains, install cert-manager, and request Let's Encrypt certificates via DNS-01. Use `kubectl get ingress -n ess -w` to watch for the load-balancer status.
+Wait for the command to finish. Terraform will reserve the ingress IP, publish DNS for your ESS subdomains, and provision Cloud SQL, IAM, and Datastream prerequisites. Use `kubectl get ingress -n ess -w` later to watch for the load-balancer status once the charts are deployed.
 
 Configure your kubeconfig as soon as the Autopilot cluster is created (no need to wait for the full `tofu apply` to finish):
 
@@ -67,7 +62,17 @@ gcloud container clusters get-credentials "ess-one-shot-gke" \
 
 Update the cluster name or region if you customized them in `infra/cloud/locals.tf`. `kubectl config current-context` should now point at the Autopilot cluster so you can tail Helm resources immediately.
 
-## 4. After apply
+## 4. Deploy the platform charts
+
+Once `kubectl` reaches the cluster, run the helper script to install cert-manager, ingress-nginx, and the Element Server Suite Helm chart with the exact settings that used to live in `helm.tf`:
+
+```bash
+./infra/cloud/deploy-charts.sh
+```
+
+The script reads outputs from the current OpenTofu state, so it must be invoked from a workstation that can run `tofu output -json` for this environment. It is safe to re-run the script whenever you need to upgrade to a newer chart release or reapply the values.
+
+## 5. After apply
 
 - Capture the outputs you need for follow-up tasks: `tofu output`.
 - TLS is provisioned automatically by cert-manager. Watch `kubectl describe certificate ess-wildcard-certificate -n ess` for status; the `ingress-nginx` load balancer presents the issued certificate once it reports `Ready: True`.
@@ -100,22 +105,25 @@ Update the cluster name or region if you customized them in `infra/cloud/locals.
 
 - Confirm BigQuery tables are receiving data from Datastream when the streams report `state: RUNNING`.
 
-## 5. Tear down (when you are done)
+## 6. Tear down (when you are done)
 
 ```bash
-tofu destroy -target=helm_release.ess -var-file=tofu.tfvars
+# Optional: clean up the Helm releases before destroying infra
+helm uninstall ess -n ess || true
+helm uninstall ingress-nginx -n ingress-nginx || true
+helm uninstall cert-manager -n "$(tofu output -raw cert_manager_namespace)" || true
+
+# Remove the GKE and supporting resources
 tofu destroy -refresh=false -var-file=tofu.tfvars
 ```
 
 Remove any leftover Cloud SQL data or BigQuery tables manually if you no longer need them.
 
-## Troubleshooting Helm Deploy
+## Troubleshooting the chart deployment
 
-The playbook:
+If the script fails, these steps usually get things moving again:
 
-- Let the original tofu apply finish or fail. If Helm gets wedged and needs tearing down, run `tofu destroy -target=helm_release.ess -var-file=tofu.tfvars` so Terraform records the delete, instead of helm uninstall.
-- After fixing the chart values, rerun the full `tofu apply -var-file=tofu.tfvars -auto-approve`; Terraform will reinstall the
-  release cleanly.
-- If you do ever remove something manually, immediately reconcile state (tofu state rm helm_release.ess or rerun destroy)
-  so Terraform isn’t left holding a pointer to something that’s gone.
-- `helm uninstall ess -n ess`
+- Let the `tofu apply` finish (or fail) before retrying Helm work so the outputs the script reads stay consistent.
+- Inspect the rendered values (`/tmp/.../ess-values.yaml`) referenced in the script output to confirm credentials and hostnames match expectations.
+- Verify your kubeconfig context and permissions (`kubectl auth can-i create secrets -n ess`).
+- If a release gets wedged, use `helm uninstall <release> -n <namespace>` and re-run `./infra/cloud/deploy-charts.sh`.
