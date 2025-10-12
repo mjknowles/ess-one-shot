@@ -4,24 +4,6 @@ resource "kubernetes_namespace" "ess" {
   }
 }
 
-resource "kubernetes_manifest" "frontend_config" {
-  manifest = {
-    apiVersion = "networking.gke.io/v1beta1"
-    kind       = "FrontendConfig"
-    metadata = {
-      name      = local.frontend_config_name
-      namespace = kubernetes_namespace.ess.metadata[0].name
-    }
-    spec = {
-      redirectToHttps = {
-        enabled = true
-      }
-    }
-  }
-
-  depends_on = [kubernetes_namespace.ess]
-}
-
 resource "kubernetes_secret" "synapse_db" {
   metadata {
     name      = local.synapse_secret_name
@@ -64,5 +46,64 @@ resource "kubernetes_secret" "matrix_auth_db" {
   depends_on = [
     kubernetes_namespace.ess,
     google_sql_user.matrix_auth
+  ]
+}
+
+resource "kubernetes_manifest" "letsencrypt_cluster_issuer" {
+  manifest = {
+    apiVersion = "cert-manager.io/v1"
+    kind       = "ClusterIssuer"
+    metadata = {
+      name = local.cert_manager_cluster_issuer_name
+    }
+    spec = {
+      acme = {
+        email  = var.acme_email
+        server = "https://acme-v02.api.letsencrypt.org/directory"
+        privateKeySecretRef = {
+          name = local.cert_manager_cluster_issuer_secret_name
+        }
+        solvers = [
+          {
+            dns01 = {
+              cloudDNS = {
+                project     = local.dns_project
+                managedZone = data.google_dns_managed_zone.ess.name
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+
+  depends_on = [
+    helm_release.cert_manager,
+    google_service_account_iam_member.cert_manager_workload_identity,
+    google_project_iam_member.cert_manager_dns_admin
+  ]
+}
+
+resource "kubernetes_manifest" "ingress_certificate" {
+  manifest = {
+    apiVersion = "cert-manager.io/v1"
+    kind       = "Certificate"
+    metadata = {
+      name      = local.ingress_tls_certificate_name
+      namespace = kubernetes_namespace.ess.metadata[0].name
+    }
+    spec = {
+      secretName = local.ingress_tls_secret_name
+      issuerRef = {
+        name = local.cert_manager_cluster_issuer_name
+        kind = "ClusterIssuer"
+      }
+      dnsNames = local.ingress_tls_dns_names
+    }
+  }
+
+  depends_on = [
+    kubernetes_namespace.ess,
+    kubernetes_manifest.letsencrypt_cluster_issuer
   ]
 }

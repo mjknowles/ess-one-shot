@@ -33,3 +33,13 @@ variable "dns_project_id" {
   type        = string
   default     = ""
 }
+
+variable "acme_email" {
+  description = "Email address used for ACME registration with Let's Encrypt."
+  type        = string
+
+  validation {
+    condition     = can(regex("[^@]+@[^@]+", trimspace(var.acme_email)))
+    error_message = "Provide a valid email address for ACME notifications."
+  }
+}

@@ -12,13 +12,14 @@ Follow these steps to bring the Element Server Suite online on GKE Autopilot wit
 
 ## 1. Set your inputs
 
-Create `infra/cloud/tofu.tfvars` with the project and DNS details:
+Create `infra/cloud/tofu.tfvars` with the project, DNS, and ACME details:
 
 ```hcl
 project_id     = "ess-one-shot"
 domain         = "mjknowles.dev"
 dns_zone_name  = "mjknowles-dev-zone"
 # dns_project_id = "dns-infra-474704"  # set only if the DNS zone lives in another project
+acme_email     = "you@example.com"
 ```
 
 ## 2. Initialize remote state
@@ -42,14 +43,17 @@ tofu apply \
   -target=google_project_service.compute \
   -target=google_project_service.container \
   -target=google_container_cluster.autopilot \
-  -var-file=tofu.tfvars
+  -var-file=tofu.tfvars -auto-approve
+
+# One-time: create CRDs
+tofu apply -target=helm_release.cert_manager -var-file=tofu.tfvars -auto-approve
 
 # Full rollout for everything else
 tofu plan -var-file=tofu.tfvars
 tofu apply -var-file=tofu.tfvars -auto-approve
 ```
 
-Wait for the command to finish. The global HTTPS load balancer will claim the reserved static IP, Terraform will publish DNS records for both traffic and ACME validation, and Certificate Manager will provision the TLS certificate. Use `kubectl get ingress -n ess -w` to watch for the load-balancer status.
+Wait for the command to finish. Terraform will reserve the ingress IP, publish DNS for your ESS subdomains, install cert-manager, and request Let's Encrypt certificates via DNS-01. Use `kubectl get ingress -n ess -w` to watch for the load-balancer status.
 
 Configure your kubeconfig as soon as the Autopilot cluster is created (no need to wait for the full `tofu apply` to finish):
 
@@ -66,7 +70,7 @@ Update the cluster name or region if you customized them in `infra/cloud/locals.
 ## 4. After apply
 
 - Capture the outputs you need for follow-up tasks: `tofu output`.
-- TLS is provisioned automatically by Certificate Manager. Wait for the certificate to reach the `ACTIVE` state (`gcloud certificate-manager certificates describe ...`) before distributing endpoints externally.
+- TLS is provisioned automatically by cert-manager. Watch `kubectl describe certificate ess-wildcard-certificate -n ess` for status; the `ingress-nginx` load balancer presents the issued certificate once it reports `Ready: True`.
 - Grant Datastream access to Cloud SQL (run once as the `postgres` user):
 
   ```sql

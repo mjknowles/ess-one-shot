@@ -13,5 +13,5 @@ resource "google_dns_record_set" "ess_hosts" {
   managed_zone = data.google_dns_managed_zone.ess.name
   project      = local.dns_project
 
-  rrdatas = [google_compute_global_address.ingress.address]
+  rrdatas = [google_compute_address.ingress.address]
 }

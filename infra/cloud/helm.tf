@@ -30,9 +30,11 @@ locals {
       enabled = false
     }
     ingress = {
-      className   = "nginx"
-      tlsEnabled  = false
-      annotations = local.ingress_annotations
+      className      = "nginx"
+      controllerType = "ingress-nginx"
+      tlsEnabled     = true
+      tlsSecret      = local.ingress_tls_secret_name
+      annotations    = local.ingress_annotations
     }
     serverName = local.base_domain
     elementAdmin = {
@@ -95,6 +97,63 @@ EOT
   }
 }
 
+resource "helm_release" "cert_manager" {
+  name       = "cert-manager"
+  repository = "https://charts.jetstack.io"
+  chart      = "cert-manager"
+  namespace  = local.cert_manager_namespace
+
+  create_namespace = true
+  cleanup_on_fail  = true
+  wait             = true
+
+  values = [
+    yamlencode({
+      installCRDs = true
+      serviceAccount = {
+        annotations = {
+          "iam.gke.io/gcp-service-account" = google_service_account.cert_manager.email
+        }
+      }
+    })
+  ]
+
+  depends_on = [
+    google_container_cluster.autopilot,
+    google_service_account.cert_manager,
+    google_service_account_iam_member.cert_manager_workload_identity
+  ]
+}
+
+resource "helm_release" "ingress_nginx" {
+  name       = "ingress-nginx"
+  repository = "https://kubernetes.github.io/ingress-nginx"
+  chart      = "ingress-nginx"
+  namespace  = "ingress-nginx"
+
+  create_namespace = true
+  cleanup_on_fail  = true
+  wait             = true
+
+  values = [
+    yamlencode({
+      controller = {
+        service = {
+          loadBalancerIP = google_compute_address.ingress.address
+          annotations = {
+            "networking.gke.io/load-balancer-type" = "External"
+          }
+        }
+      }
+    })
+  ]
+
+  depends_on = [
+    google_compute_address.ingress,
+    google_container_cluster.autopilot
+  ]
+}
+
 resource "helm_release" "ess" {
   name       = "ess"
   repository = "oci://ghcr.io/element-hq/ess-helm"
@@ -110,10 +169,10 @@ resource "helm_release" "ess" {
   ]
 
   depends_on = [
-    google_certificate_manager_certificate_map_entry.ess,
-    google_compute_global_address.ingress,
-    kubernetes_manifest.frontend_config,
+    google_compute_address.ingress,
     kubernetes_secret.synapse_db,
-    kubernetes_secret.matrix_auth_db
+    kubernetes_secret.matrix_auth_db,
+    kubernetes_manifest.ingress_certificate,
+    helm_release.ingress_nginx
   ]
 }

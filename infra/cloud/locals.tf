@@ -37,15 +37,6 @@ locals {
   sanitized_base_domain                = replace(local.base_domain, ".", "-")
   static_ip_name                       = "ess-ingress-ip"
   dns_project                          = trimspace(var.dns_project_id) != "" ? trimspace(var.dns_project_id) : var.project_id
-  frontend_config_name                 = "ess-frontend-config"
-  certificate_name                     = substr("${local.sanitized_base_domain}-cert", 0, 63)
-  certificate_map_name                 = substr("${local.sanitized_base_domain}-cert-map", 0, 63)
-  certificate_dns_authorization_prefix = substr("${local.sanitized_base_domain}-auth", 0, 63)
-  certificate_domains_list = sort([
-    local.base_domain,
-    "*.${local.base_domain}"
-  ])
-
   sanitized_instance_name      = join("-", regexall("[a-z0-9]+", lower(local.cloudsql_instance_name)))
   cloudsql_private_range_name  = substr("${local.sanitized_instance_name}-ps-range", 0, 62)
   synapse_service_account_name = "synapse-db-client"
@@ -55,4 +46,14 @@ locals {
   replication_user_name        = "datastream_replica"
   datastream_publication       = "ess_publication"
   datastream_replication_slot  = "ess_replication_slot"
+  cert_manager_namespace            = "cert-manager"
+  cert_manager_service_account_name = "cert-manager"
+  cert_manager_cluster_issuer_name  = "letsencrypt-dns"
+  cert_manager_cluster_issuer_secret_name = "${local.cert_manager_cluster_issuer_name}-account-key"
+  ingress_tls_certificate_name      = "ess-wildcard-certificate"
+  ingress_tls_secret_name           = "ess-ingress-tls"
+  ingress_tls_dns_names = sort([
+    local.base_domain,
+    "*.${local.base_domain}"
+  ])
 }

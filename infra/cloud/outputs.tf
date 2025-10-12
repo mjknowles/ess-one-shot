@@ -14,8 +14,8 @@ output "ess_namespace" {
 }
 
 output "ingress_ip_address" {
-  description = "Global static IP address assigned to the HTTPS load balancer."
-  value       = google_compute_global_address.ingress.address
+  description = "Static IP address assigned to the ingress-nginx LoadBalancer service."
+  value       = google_compute_address.ingress.address
 }
 
 output "hosts" {
