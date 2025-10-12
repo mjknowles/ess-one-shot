@@ -60,3 +60,10 @@ locals {
     "*.${local.base_domain}"
   ])
 }
+
+locals {
+  dns_authorizations = {
+    base     = google_certificate_manager_dns_authorization.base
+    wildcard = google_certificate_manager_dns_authorization.wildcard
+  }
+}

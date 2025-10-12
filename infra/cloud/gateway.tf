@@ -47,7 +47,8 @@ YAML
   depends_on = [
     google_project_service.networkservices,
     google_certificate_manager_certificate_map_entry.base,
-    google_certificate_manager_certificate_map_entry.wildcard
+    google_certificate_manager_certificate_map_entry.wildcard,
+    google_container_cluster.autopilot
   ]
 }
 

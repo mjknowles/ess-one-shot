@@ -1,3 +1,10 @@
+data "google_client_config" "default" {}
+data "google_container_cluster" "autopilot" {
+  name     = google_container_cluster.autopilot.name
+  location = google_container_cluster.autopilot.location
+  project  = google_container_cluster.autopilot.project
+}
+
 resource "google_container_cluster" "autopilot" {
   name     = local.cluster_name
   project  = var.project_id
@@ -13,6 +20,10 @@ resource "google_container_cluster" "autopilot" {
     services_secondary_range_name = local.services_secondary_range_name
   }
 
+  gateway_api_config {
+    channel = "CHANNEL_STANDARD"
+  }
+
   depends_on = [
     google_project_service.compute,
     google_project_service.container
@@ -26,7 +37,11 @@ locals {
 }
 
 provider "kubernetes" {
-  host                   = local.cluster_endpoint
-  token                  = data.google_client_config.current.access_token
-  cluster_ca_certificate = local.cluster_ca
+  host  = "https://${data.google_container_cluster.autopilot.endpoint}"
+
+  token = data.google_client_config.default.access_token
+
+  cluster_ca_certificate = base64decode(
+    data.google_container_cluster.autopilot.master_auth[0].cluster_ca_certificate
+  )
 }

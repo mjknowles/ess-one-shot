@@ -17,18 +17,11 @@ resource "google_dns_record_set" "ess_hosts" {
 }
 
 resource "google_dns_record_set" "certificate_dns_authorizations" {
-  for_each = {
-    base     = google_certificate_manager_dns_authorization.base.dns_resource_record
-    wildcard = google_certificate_manager_dns_authorization.wildcard.dns_resource_record
-  }
+  for_each = local.dns_authorizations
 
-  provider = google.dns
-
-  name         = each.value.name
-  type         = each.value.type
+  name         = each.value.dns_resource_record[0].name
+  type         = each.value.dns_resource_record[0].type
   ttl          = 300
   managed_zone = data.google_dns_managed_zone.ess.name
-  project      = local.dns_project
-
-  rrdatas = [each.value.data]
+  rrdatas      = [each.value.dns_resource_record[0].data]
 }
