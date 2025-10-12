@@ -106,6 +106,7 @@ resource "helm_release" "cert_manager" {
   create_namespace = true
   cleanup_on_fail  = true
   wait             = true
+  timeout          = 900
 
   values = [
     yamlencode({
@@ -134,6 +135,7 @@ resource "helm_release" "ingress_nginx" {
   create_namespace = true
   cleanup_on_fail  = true
   wait             = true
+  timeout          = 900
 
   values = [
     yamlencode({

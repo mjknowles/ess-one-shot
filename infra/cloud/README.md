@@ -47,6 +47,8 @@ tofu apply \
 
 # One-time: create CRDs
 tofu apply -target=helm_release.cert_manager -var-file=tofu.tfvars -auto-approve
+# If it times out
+tofu apply -target=helm_release.cert_manager -var-file=tofu.tfvars -auto-approve -refresh-only
 
 # Full rollout for everything else
 tofu plan -var-file=tofu.tfvars
@@ -58,11 +60,9 @@ Wait for the command to finish. Terraform will reserve the ingress IP, publish D
 Configure your kubeconfig as soon as the Autopilot cluster is created (no need to wait for the full `tofu apply` to finish):
 
 ```bash
-PROJECT_ID="ess-one-shot"  # replace with the same project_id you set in tofu.tfvars
-
 gcloud container clusters get-credentials "ess-one-shot-gke" \
   --region "us-central1" \
-  --project "${PROJECT_ID}"
+  --project ess-one-shot
 ```
 
 Update the cluster name or region if you customized them in `infra/cloud/locals.tf`. `kubectl config current-context` should now point at the Autopilot cluster so you can tail Helm resources immediately.
@@ -104,7 +104,7 @@ Update the cluster name or region if you customized them in `infra/cloud/locals.
 
 ```bash
 tofu destroy -target=helm_release.ess -var-file=tofu.tfvars
-tofu destroy -var-file=tofu.tfvars
+tofu destroy -refresh=false -var-file=tofu.tfvars
 ```
 
 Remove any leftover Cloud SQL data or BigQuery tables manually if you no longer need them.
