@@ -19,7 +19,7 @@ project_id     = "ess-one-shot"
 domain         = "mjknowles.dev"
 dns_zone_name  = "mjknowles-dev-zone"
 # dns_project_id = "dns-infra-474704"  # set only if the DNS zone lives in another project
-acme_email     = "you@example.com"
+acme_email     = "mjknowles23@gmail.com"
 ```
 
 ## 2. Initialize remote state
@@ -50,8 +50,6 @@ tofu plan -var-file=tofu.tfvars
 tofu apply -var-file=tofu.tfvars -auto-approve
 ```
 
-Wait for the command to finish. Terraform will reserve the ingress IP, publish DNS for your ESS subdomains, and provision Cloud SQL, IAM, and Datastream prerequisites. Use `kubectl get ingress -n ess -w` later to watch for the load-balancer status once the charts are deployed.
-
 Configure your kubeconfig as soon as the Autopilot cluster is created (no need to wait for the full `tofu apply` to finish):
 
 ```bash
@@ -60,22 +58,16 @@ gcloud container clusters get-credentials "ess-one-shot-gke" \
   --project ess-one-shot
 ```
 
-Update the cluster name or region if you customized them in `infra/cloud/locals.tf`. `kubectl config current-context` should now point at the Autopilot cluster so you can tail Helm resources immediately.
-
 ## 4. Deploy the platform charts
 
 Once `kubectl` reaches the cluster, run the helper script to install cert-manager, ingress-nginx, and the Element Server Suite Helm chart with the exact settings that used to live in `helm.tf`:
 
 ```bash
-./infra/cloud/deploy-charts.sh
+./deploy-charts.sh
 ```
-
-The script reads outputs from the current OpenTofu state, so it must be invoked from a workstation that can run `tofu output -json` for this environment. It is safe to re-run the script whenever you need to upgrade to a newer chart release or reapply the values.
 
 ## 5. After apply
 
-- Capture the outputs you need for follow-up tasks: `tofu output`.
-- TLS is provisioned automatically by cert-manager. Watch `kubectl describe certificate ess-wildcard-certificate -n ess` for status; the `ingress-nginx` load balancer presents the issued certificate once it reports `Ready: True`.
 - Grant Datastream access to Cloud SQL (run once as the `postgres` user):
 
   ```sql

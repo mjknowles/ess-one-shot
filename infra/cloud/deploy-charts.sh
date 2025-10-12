@@ -110,7 +110,6 @@ trap 'rm -rf "${TMP_DIR}"' EXIT
 
 CERT_MANAGER_VALUES="${TMP_DIR}/cert-manager-values.yaml"
 cat > "${CERT_MANAGER_VALUES}" <<EOF
-installCRDs: true
 serviceAccount:
   name: "${CERT_MANAGER_KSA_NAME}"
   annotations:
@@ -258,6 +257,7 @@ fi
 helm upgrade --install cert-manager jetstack/cert-manager \
   --namespace "${CERT_MANAGER_NAMESPACE}" \
   --create-namespace \
+  --set installCRDs=true \
   --wait \
   --timeout "${HELM_TIMEOUT}" \
   -f "${CERT_MANAGER_VALUES}"
