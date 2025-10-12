@@ -1,8 +1,7 @@
 locals {
   ingress_annotations = {
-    "kubernetes.io/ingress.global-static-ip-name" = google_compute_global_address.ingress.name
-    "networking.gke.io/certmap"                   = google_certificate_manager_certificate_map.ess.id
-    "networking.gke.io/v1beta1.FrontendConfig"    = kubernetes_manifest.frontend_config.manifest.metadata.name
+    # Force HTTPS at the ingress layer when using ingress-nginx
+    "nginx.ingress.kubernetes.io/force-ssl-redirect" = "true"
   }
 
   cloudsql_postgres = {
@@ -31,7 +30,7 @@ locals {
       enabled = false
     }
     ingress = {
-      className   = "gce"
+      className   = "nginx"
       tlsEnabled  = false
       annotations = local.ingress_annotations
     }
