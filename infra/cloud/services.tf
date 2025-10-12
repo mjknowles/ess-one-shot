@@ -46,3 +46,17 @@ resource "google_project_service" "bigquery" {
   disable_on_destroy         = false
   disable_dependent_services = false
 }
+
+resource "google_project_service" "certificatemanager" {
+  project                    = var.project_id
+  service                    = "certificatemanager.googleapis.com"
+  disable_on_destroy         = false
+  disable_dependent_services = false
+}
+
+resource "google_project_service" "networkservices" {
+  project                    = var.project_id
+  service                    = "networkservices.googleapis.com"
+  disable_on_destroy         = false
+  disable_dependent_services = false
+}

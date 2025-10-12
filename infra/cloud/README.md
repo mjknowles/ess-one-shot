@@ -12,14 +12,13 @@ Follow these steps to bring the Element Server Suite online on GKE Autopilot wit
 
 ## 1. Set your inputs
 
-Create `infra/cloud/tofu.tfvars` with the project, DNS, and ACME details:
+Create `infra/cloud/tofu.tfvars` with the project and DNS details:
 
 ```hcl
 project_id     = "ess-one-shot"
 domain         = "mjknowles.dev"
 dns_zone_name  = "mjknowles-dev-zone"
 # dns_project_id = "dns-infra-474704"  # set only if the DNS zone lives in another project
-acme_email     = "mjknowles23@gmail.com"
 ```
 
 ## 2. Initialize remote state
@@ -60,7 +59,7 @@ gcloud container clusters get-credentials "ess-one-shot-gke" \
 
 ## 4. Deploy the platform charts
 
-Once `kubectl` reaches the cluster, run the helper script to install cert-manager, ingress-nginx, and the Element Server Suite Helm chart with the exact settings that used to live in `helm.tf`:
+Once `kubectl` reaches the cluster, run the helper script to install the Element Server Suite Helm chart with the exact settings that used to live in `helm.tf`. The GKE Gateway, static IP, and Google-managed certificates are provisioned by OpenTofu:
 
 ```bash
 ./deploy-charts.sh
@@ -102,8 +101,6 @@ Once `kubectl` reaches the cluster, run the helper script to install cert-manage
 ```bash
 # Optional: clean up the Helm releases before destroying infra
 helm uninstall ess -n ess || true
-helm uninstall ingress-nginx -n ingress-nginx || true
-helm uninstall cert-manager -n "$(tofu output -raw cert_manager_namespace)" || true
 
 # Remove the GKE and supporting resources
 tofu destroy -refresh=false -var-file=tofu.tfvars

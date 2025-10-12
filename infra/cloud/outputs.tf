@@ -13,9 +13,9 @@ output "ess_namespace" {
   value       = kubernetes_namespace.ess.metadata[0].name
 }
 
-output "ingress_ip_address" {
-  description = "Static IP address assigned to the ingress-nginx LoadBalancer service."
-  value       = google_compute_address.ingress.address
+output "gateway_ip_address" {
+  description = "Static IP address assigned to the GKE Gateway."
+  value       = google_compute_global_address.gateway.address
 }
 
 output "hosts" {
@@ -58,11 +58,6 @@ output "base_domain" {
   value       = local.base_domain
 }
 
-output "acme_email" {
-  description = "ACME contact email for Let's Encrypt."
-  value       = var.acme_email
-}
-
 output "dns_project_id" {
   description = "Project that owns the Cloud DNS managed zone."
   value       = local.dns_project
@@ -71,46 +66,6 @@ output "dns_project_id" {
 output "dns_zone_name" {
   description = "Cloud DNS managed zone name."
   value       = data.google_dns_managed_zone.ess.name
-}
-
-output "cert_manager_namespace" {
-  description = "Namespace used for cert-manager components."
-  value       = local.cert_manager_namespace
-}
-
-output "cert_manager_service_account_name" {
-  description = "Kubernetes service account name for cert-manager."
-  value       = local.cert_manager_service_account_name
-}
-
-output "cert_manager_service_account_email" {
-  description = "GCP service account annotated onto the cert-manager service account."
-  value       = google_service_account.cert_manager.email
-}
-
-output "cert_manager_cluster_issuer_name" {
-  description = "Name of the ClusterIssuer used for Let's Encrypt."
-  value       = local.cert_manager_cluster_issuer_name
-}
-
-output "cert_manager_cluster_issuer_secret_name" {
-  description = "Secret that stores the ACME account private key."
-  value       = local.cert_manager_cluster_issuer_secret_name
-}
-
-output "ingress_tls_secret_name" {
-  description = "Secret that stores the wildcard TLS certificate."
-  value       = local.ingress_tls_secret_name
-}
-
-output "ingress_tls_certificate_name" {
-  description = "Name of the cert-manager Certificate resource."
-  value       = local.ingress_tls_certificate_name
-}
-
-output "ingress_tls_dns_names" {
-  description = "DNS names covered by the wildcard TLS certificate."
-  value       = local.ingress_tls_dns_names
 }
 
 output "synapse_service_account_name" {

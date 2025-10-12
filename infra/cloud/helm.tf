@@ -1,9 +1,4 @@
 locals {
-  ingress_annotations = {
-    # Force HTTPS at the ingress layer when using ingress-nginx
-    "nginx.ingress.kubernetes.io/force-ssl-redirect" = "true"
-  }
-
   cloudsql_postgres = {
     host = google_sql_database_instance.ess.private_ip_address
     port = 5432
@@ -30,11 +25,7 @@ locals {
       enabled = false
     }
     ingress = {
-      className      = "nginx"
-      controllerType = "ingress-nginx"
-      tlsEnabled     = true
-      tlsSecret      = local.ingress_tls_secret_name
-      annotations    = local.ingress_annotations
+      tlsEnabled = false
     }
     serverName = local.base_domain
     elementAdmin = {

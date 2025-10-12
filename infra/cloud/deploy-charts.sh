@@ -5,7 +5,6 @@ set -euo pipefail
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 TF_DIR="${SCRIPT_DIR}"
 HELM_TIMEOUT="15m"
-KUBECTL_WAIT_TIMEOUT="600s"
 
 usage() {
   cat <<'EOF'
@@ -81,10 +80,7 @@ HOST_MATRIX=$(tf_output_string "hosts.value.matrix")
 HOST_ACCOUNT=$(tf_output_string "hosts.value.account")
 HOST_RTC=$(tf_output_string "hosts.value.rtc")
 BASE_DOMAIN=$(tf_output_string "base_domain.value")
-ACME_EMAIL=$(tf_output_string "acme_email.value")
-DNS_PROJECT_ID=$(tf_output_string "dns_project_id.value")
-DNS_ZONE_NAME=$(tf_output_string "dns_zone_name.value")
-INGRESS_IP=$(tf_output_string "ingress_ip_address.value")
+GATEWAY_IP=$(tf_output_string "gateway_ip_address.value")
 CLOUDSQL_HOST=$(tf_output_string "cloudsql_private_ip.value")
 SYNAPSE_SECRET_NAME=$(tf_output_string "synapse_database_secret_name.value")
 MAS_SECRET_NAME=$(tf_output_string "matrix_auth_database_secret_name.value")
@@ -92,14 +88,6 @@ SYNAPSE_SA_NAME=$(tf_output_string "synapse_service_account_name.value")
 SYNAPSE_SA_EMAIL=$(tf_output_string "synapse_service_account_email.value")
 MAS_SA_NAME=$(tf_output_string "matrix_auth_service_account_name.value")
 MAS_SA_EMAIL=$(tf_output_string "matrix_auth_service_account_email.value")
-CERT_MANAGER_NAMESPACE=$(tf_output_string "cert_manager_namespace.value")
-CERT_MANAGER_KSA_NAME=$(tf_output_string "cert_manager_service_account_name.value")
-CERT_MANAGER_GSA_EMAIL=$(tf_output_string "cert_manager_service_account_email.value")
-CLUSTER_ISSUER_NAME=$(tf_output_string "cert_manager_cluster_issuer_name.value")
-CLUSTER_ISSUER_SECRET=$(tf_output_string "cert_manager_cluster_issuer_secret_name.value")
-INGRESS_TLS_SECRET=$(tf_output_string "ingress_tls_secret_name.value")
-INGRESS_TLS_CERT_NAME=$(tf_output_string "ingress_tls_certificate_name.value")
-INGRESS_TLS_DNS_LIST=$(jq -r '.ingress_tls_dns_names.value[]' <<<"${TF_OUTPUT_JSON}")
 SYNAPSE_DB_USER=$(tf_output_string "synapse_database_user.value")
 SYNAPSE_DB_NAME=$(tf_output_string "synapse_database_name.value")
 MAS_DB_USER=$(tf_output_string "matrix_auth_database_user.value")
@@ -108,75 +96,12 @@ MAS_DB_NAME=$(tf_output_string "matrix_auth_database_name.value")
 TMP_DIR=$(mktemp -d)
 trap 'rm -rf "${TMP_DIR}"' EXIT
 
-CERT_MANAGER_VALUES="${TMP_DIR}/cert-manager-values.yaml"
-cat > "${CERT_MANAGER_VALUES}" <<EOF
-serviceAccount:
-  name: "${CERT_MANAGER_KSA_NAME}"
-  annotations:
-    iam.gke.io/gcp-service-account: "${CERT_MANAGER_GSA_EMAIL}"
-resources:
-  requests:
-    cpu: 100m
-    memory: 128Mi
-webhook:
-  resources:
-    requests:
-      cpu: 50m
-      memory: 96Mi
-cainjector:
-  resources:
-    requests:
-      cpu: 75m
-      memory: 128Mi
-startupapicheck:
-  resources:
-    requests:
-      cpu: 25m
-      memory: 64Mi
-EOF
-
-INGRESS_VALUES="${TMP_DIR}/ingress-nginx-values.yaml"
-cat > "${INGRESS_VALUES}" <<EOF
-controller:
-  service:
-    loadBalancerIP: "${INGRESS_IP}"
-    annotations:
-      networking.gke.io/load-balancer-type: External
-  resources:
-    requests:
-      cpu: 100m
-      memory: 128Mi
-  admissionWebhooks:
-    createSecretJob:
-      resources:
-        requests:
-          cpu: 25m
-          memory: 64Mi
-          ephemeral-storage: 128Mi
-    patchWebhookJob:
-      resources:
-        requests:
-          cpu: 25m
-          memory: 64Mi
-          ephemeral-storage: 128Mi
-defaultBackend:
-  resources:
-    requests:
-      cpu: 25m
-      memory: 64Mi
-EOF
-
 ESS_VALUES="${TMP_DIR}/ess-values.yaml"
 cat > "${ESS_VALUES}" <<EOF
 postgres:
   enabled: false
 ingress:
-  className: nginx
-  controllerType: ingress-nginx
-  tlsEnabled: true
-  tlsSecret: "${INGRESS_TLS_SECRET}"
-  annotations:
-    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+  tlsEnabled: false
 serverName: "${BASE_DOMAIN}"
 elementAdmin:
   ingress:
@@ -249,62 +174,8 @@ synapse:
 EOF
 
 if [[ "${SKIP_REPO_UPDATE}" -eq 0 ]]; then
-  helm repo add jetstack https://charts.jetstack.io >/dev/null 2>&1 || true
-  helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx >/dev/null 2>&1 || true
   helm repo update >/dev/null
 fi
-
-helm upgrade --install cert-manager jetstack/cert-manager \
-  --namespace "${CERT_MANAGER_NAMESPACE}" \
-  --create-namespace \
-  --set installCRDs=true \
-  --wait \
-  --timeout "${HELM_TIMEOUT}" \
-  -f "${CERT_MANAGER_VALUES}"
-
-kubectl -n "${CERT_MANAGER_NAMESPACE}" wait --for=condition=Available deployment/cert-manager --timeout="${KUBECTL_WAIT_TIMEOUT}"
-kubectl -n "${CERT_MANAGER_NAMESPACE}" wait --for=condition=Available deployment/cert-manager-webhook --timeout="${KUBECTL_WAIT_TIMEOUT}"
-kubectl -n "${CERT_MANAGER_NAMESPACE}" wait --for=condition=Available deployment/cert-manager-cainjector --timeout="${KUBECTL_WAIT_TIMEOUT}"
-
-cat <<EOF | kubectl apply -f -
-apiVersion: cert-manager.io/v1
-kind: ClusterIssuer
-metadata:
-  name: "${CLUSTER_ISSUER_NAME}"
-spec:
-  acme:
-    email: "${ACME_EMAIL}"
-    server: https://acme-v02.api.letsencrypt.org/directory
-    privateKeySecretRef:
-      name: "${CLUSTER_ISSUER_SECRET}"
-    solvers:
-      - dns01:
-          cloudDNS:
-            project: "${DNS_PROJECT_ID}"
-            managedZone: "${DNS_ZONE_NAME}"
-EOF
-
-cat <<EOF | kubectl apply -f -
-apiVersion: cert-manager.io/v1
-kind: Certificate
-metadata:
-  name: "${INGRESS_TLS_CERT_NAME}"
-  namespace: "${ESS_NAMESPACE}"
-spec:
-  secretName: "${INGRESS_TLS_SECRET}"
-  issuerRef:
-    name: "${CLUSTER_ISSUER_NAME}"
-    kind: ClusterIssuer
-  dnsNames:
-$(while read -r dns_name; do echo "    - \"${dns_name}\""; done <<< "${INGRESS_TLS_DNS_LIST}")
-EOF
-
-helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
-  --namespace ingress-nginx \
-  --create-namespace \
-  --wait \
-  --timeout "${HELM_TIMEOUT}" \
-  -f "${INGRESS_VALUES}"
 
 helm upgrade --install ess oci://ghcr.io/element-hq/ess-helm/matrix-stack \
   --namespace "${ESS_NAMESPACE}" \
@@ -313,4 +184,5 @@ helm upgrade --install ess oci://ghcr.io/element-hq/ess-helm/matrix-stack \
   --timeout "${HELM_TIMEOUT}" \
   -f "${ESS_VALUES}"
 
-echo "Helm releases applied successfully."
+echo "Helm release applied successfully."
+echo "Expose ${BASE_DOMAIN} and subdomains to the Gateway static IP: ${GATEWAY_IP}"
