@@ -41,10 +41,22 @@ locals {
       ingress = {
         host = local.hostnames.admin
       }
+      resources = {
+        requests = {
+          cpu    = "25m"
+          memory = "64Mi"
+        }
+      }
     }
     elementWeb = {
       ingress = {
         host = local.hostnames.chat
+      }
+      resources = {
+        requests = {
+          cpu    = "25m"
+          memory = "64Mi"
+        }
       }
     }
     matrixAuthenticationService = {
@@ -63,10 +75,22 @@ locals {
         }
       }
       serviceAccount = local.matrix_auth_service_account_block
+      resources = {
+        requests = {
+          cpu    = "100m"
+          memory = "256Mi"
+        }
+      }
     }
     matrixRTC = {
       ingress = {
         host = local.hostnames.rtc
+      }
+      resources = {
+        requests = {
+          cpu    = "25m"
+          memory = "32Mi"
+        }
       }
     }
     synapse = {
@@ -93,6 +117,12 @@ database:
 EOT
         }
       }
+      resources = {
+        requests = {
+          cpu    = "250m"
+          memory = "512Mi"
+        }
+      }
     }
   }
 }
@@ -114,6 +144,36 @@ resource "helm_release" "cert_manager" {
       serviceAccount = {
         annotations = {
           "iam.gke.io/gcp-service-account" = google_service_account.cert_manager.email
+        }
+      }
+      resources = {
+        requests = {
+          cpu    = "100m"
+          memory = "128Mi"
+        }
+      }
+      webhook = {
+        resources = {
+          requests = {
+            cpu    = "50m"
+            memory = "96Mi"
+          }
+        }
+      }
+      cainjector = {
+        resources = {
+          requests = {
+            cpu    = "75m"
+            memory = "128Mi"
+          }
+        }
+      }
+      startupapicheck = {
+        resources = {
+          requests = {
+            cpu    = "25m"
+            memory = "64Mi"
+          }
         }
       }
     })
@@ -144,6 +204,40 @@ resource "helm_release" "ingress_nginx" {
           loadBalancerIP = google_compute_address.ingress.address
           annotations = {
             "networking.gke.io/load-balancer-type" = "External"
+          }
+        }
+        resources = {
+          requests = {
+            cpu    = "100m"
+            memory = "128Mi"
+          }
+        }
+        admissionWebhooks = {
+          createSecretJob = {
+            resources = {
+              requests = {
+                cpu                 = "25m"
+                memory              = "64Mi"
+                "ephemeral-storage" = "128Mi"
+              }
+            }
+          }
+          patchWebhookJob = {
+            resources = {
+              requests = {
+                cpu                 = "25m"
+                memory              = "64Mi"
+                "ephemeral-storage" = "128Mi"
+              }
+            }
+          }
+        }
+      }
+      defaultBackend = {
+        resources = {
+          requests = {
+            cpu    = "25m"
+            memory = "64Mi"
           }
         }
       }
