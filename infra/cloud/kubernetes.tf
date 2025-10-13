@@ -2,6 +2,8 @@ resource "kubernetes_namespace" "ess" {
   metadata {
     name = "ess"
   }
+
+  depends_on = [google_container_cluster.autopilot]
 }
 
 resource "kubernetes_secret" "synapse_db" {

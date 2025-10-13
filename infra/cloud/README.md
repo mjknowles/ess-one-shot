@@ -103,7 +103,7 @@ Once `kubectl` reaches the cluster, run the helper script to install the Element
 helm uninstall ess -n ess || true
 
 # Remove the GKE and supporting resources
-tofu destroy -refresh=false -var-file=tofu.tfvars
+tofu destroy -var-file=tofu.tfvars -refresh=false
 ```
 
 Remove any leftover Cloud SQL data or BigQuery tables manually if you no longer need them.

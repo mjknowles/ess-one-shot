@@ -44,6 +44,16 @@ resource "google_compute_global_address" "cloudsql_private_range" {
   depends_on = [google_project_service.servicenetworking]
 }
 
+resource "time_sleep" "wait_for_sql_detach" {
+  destroy_duration = "180s"
+
+  triggers = {
+    sql_instance_id = google_sql_database_instance.ess.id
+  }
+
+  depends_on = [google_sql_database_instance.ess]
+}
+
 resource "google_service_networking_connection" "cloudsql_private_connection" {
   network                 = google_compute_network.primary.id
   service                 = "servicenetworking.googleapis.com"
@@ -51,6 +61,8 @@ resource "google_service_networking_connection" "cloudsql_private_connection" {
 
   depends_on = [
     google_project_service.servicenetworking,
-    google_compute_global_address.cloudsql_private_range
+    google_compute_global_address.cloudsql_private_range,
   ]
 }
+
+
