@@ -1,6 +1,6 @@
 locals {
   region                        = "us-central1"
-  cluster_name                  = "ess-one-shot-gke"
+  cluster_name                  = "ess-one-shot-gke2"
   vpc_network_name              = "ess-one-shot-vpc"
   subnetwork_name               = "ess-one-shot-subnet"
   subnetwork_ip_cidr_range      = "10.10.0.0/20"
@@ -46,9 +46,6 @@ locals {
   replication_user_name               = "datastream_replica"
   datastream_publication              = "ess_publication"
   datastream_replication_slot         = "ess_replication_slot"
-  gateway_name                        = "ess-gateway"
-  gateway_listener_wildcard           = "wildcard-https"
-  gateway_listener_root               = "root-https"
   certificate_name                    = "ess-gateway-certificate"
   certificate_map_name                = "ess-gateway-cert-map"
   certificate_map_entry_base_name     = "ess-base-certificate-entry"

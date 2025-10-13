@@ -3,6 +3,14 @@ output "cluster_name" {
   value       = google_container_cluster.autopilot.name
 }
 
+output "cluster_endpoint" {
+  value = google_container_cluster.autopilot.endpoint
+}
+
+output "cluster_ca_certificate" {
+  value = google_container_cluster.autopilot.master_auth[0].cluster_ca_certificate
+}
+
 output "cluster_region" {
   description = "Region where the cluster is running."
   value       = google_container_cluster.autopilot.location
@@ -114,4 +122,8 @@ output "datastream_stream_ids" {
     synapse = google_datastream_stream.synapse.stream_id
     mas     = google_datastream_stream.matrix_auth.stream_id
   }
+}
+
+output "certificate_map_name" {
+  value = google_certificate_manager_certificate_map.gateway.name
 }

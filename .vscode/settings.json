@@ -1,7 +1,8 @@
 {
   "editor.formatOnSave": true,
   "[terraform]": {
-    "editor.defaultFormatter": "hashicorp.terraform"
+    "editor.defaultFormatter": "hashicorp.terraform",
+    "editor.formatOnSave": true
   },
   "yaml.format.enable": true,
   "files.trimTrailingWhitespace": true,

@@ -12,7 +12,7 @@ Follow these steps to bring the Element Server Suite online on GKE Autopilot wit
 
 ## 1. Set your inputs
 
-Create `infra/cloud/tofu.tfvars` with the project and DNS details:
+Create `infra/cloud/terraform.tfvars` with the project and DNS details:
 
 ```hcl
 project_id     = "ess-one-shot"
@@ -37,22 +37,13 @@ Run with your project, bucket, and region; add `--state-admin you@example.com` i
 ## 3. Apply the infrastructure
 
 ```bash
-# One-time: enable core APIs and create the Autopilot cluster
-tofu apply \
-  -target=google_project_service.compute \
-  -target=google_project_service.container \
-  -target=google_container_cluster.autopilot \
-  -var-file=tofu.tfvars -auto-approve
-
-# Full rollout for everything else
-tofu plan -var-file=tofu.tfvars
-tofu apply -var-file=tofu.tfvars -auto-approve
+tofu apply -var-file=../terraform.tfvars -auto-approve
 ```
 
 Configure your kubeconfig as soon as the Autopilot cluster is created (no need to wait for the full `tofu apply` to finish):
 
 ```bash
-gcloud container clusters get-credentials "ess-one-shot-gke" \
+gcloud container clusters get-credentials "ess-one-shot-gke2" \
   --region "us-central1" \
   --project ess-one-shot
 ```
@@ -103,7 +94,15 @@ Once `kubectl` reaches the cluster, run the helper script to install the Element
 helm uninstall ess -n ess || true
 
 # Remove the GKE and supporting resources
-tofu destroy -var-file=tofu.tfvars -refresh=false
+tofu destroy -var-file=../terraform.tfvars
+
+mjknowles@mac cloud % gcloud compute networks peerings delete servicenetworking-googleapis-com \
+  --network=ess-one-shot-vpc \
+  --project=ess-one-shot
+
+mjknowles@mac cloud % gcloud compute addresses delete ess-matrix-postgres-ps-range \
+  --global \
+  --project=ess-one-shot
 ```
 
 Remove any leftover Cloud SQL data or BigQuery tables manually if you no longer need them.
