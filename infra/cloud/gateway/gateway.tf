@@ -3,9 +3,7 @@
 ########################
 
 resource "time_sleep" "wait_for_gateway_api" {
-  depends_on = [google_container_cluster.autopilot]
-
-  # Wait ~90 seconds for CRDs to register (you can tune this)
+  depends_on = [data.terraform_remote_state.base]
   create_duration = "90s"
 }
 
@@ -16,15 +14,15 @@ apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata:
   name: ${local.gateway_name}
-  namespace: ${kubernetes_namespace.ess.metadata[0].name}
+  namespace: ${local.ess_namespace}
   annotations:
     # Attach Certificate Map managed in Certificate Manager
-    networking.gke.io/certmap: ${google_certificate_manager_certificate_map.gateway.name}
+    networking.gke.io/certmap: ${local.certificate_map}
 spec:
   gatewayClassName: gke-l7-global-external-managed
   addresses:
   - type: IPAddress
-    value: ${google_compute_global_address.gateway.address}
+    value: ${local.gateway_ip}
 
   listeners:
   - name: ${local.gateway_listener_wildcard}
@@ -45,9 +43,6 @@ YAML
   )
 
   depends_on = [
-    google_project_service.networkservices,
-    google_certificate_manager_certificate_map.gateway,
-    google_container_cluster.autopilot,
     time_sleep.wait_for_gateway_api
   ]
 }
@@ -63,7 +58,7 @@ apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
   name: ess-element-admin
-  namespace: ${kubernetes_namespace.ess.metadata[0].name}
+  namespace: ${local.ess_namespace}
 spec:
   parentRefs:
   - name: ${local.gateway_name}
@@ -87,7 +82,7 @@ apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
   name: ess-element-web
-  namespace: ${kubernetes_namespace.ess.metadata[0].name}
+  namespace: ${local.ess_namespace}
 spec:
   parentRefs:
   - name: ${local.gateway_name}
@@ -111,7 +106,7 @@ apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
   name: ess-matrix-authentication-service
-  namespace: ${kubernetes_namespace.ess.metadata[0].name}
+  namespace: ${local.ess_namespace}
 spec:
   parentRefs:
   - name: ${local.gateway_name}
@@ -135,7 +130,7 @@ apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
   name: ess-matrix-rtc
-  namespace: ${kubernetes_namespace.ess.metadata[0].name}
+  namespace: ${local.ess_namespace}
 spec:
   parentRefs:
   - name: ${local.gateway_name}
@@ -166,7 +161,7 @@ apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
   name: ess-matrix
-  namespace: ${kubernetes_namespace.ess.metadata[0].name}
+  namespace: ${local.ess_namespace}
 spec:
   parentRefs:
   - name: ${local.gateway_name}
@@ -197,7 +192,7 @@ apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
   name: ess-well-known
-  namespace: ${kubernetes_namespace.ess.metadata[0].name}
+  namespace: ${local.ess_namespace}
 spec:
   parentRefs:
   - name: ${local.gateway_name}
