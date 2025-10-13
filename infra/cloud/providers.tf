@@ -8,4 +8,5 @@ data "google_client_config" "current" {}
 provider "google" {
   alias   = "dns"
   project = local.dns_project
+  region  = local.region
 }
