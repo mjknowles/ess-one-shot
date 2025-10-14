@@ -18,6 +18,17 @@ resource "google_dns_record_set" "cert_validation" {
   type    = google_certificate_manager_dns_authorization.base.dns_resource_record[0].type
   ttl     = 300
   rrdatas = [google_certificate_manager_dns_authorization.base.dns_resource_record[0].data]
+
+  # 👇 These lifecycle rules prevent duplicate-creation 409s
+  lifecycle {
+    create_before_destroy = true
+    ignore_changes        = [rrdatas]
+  }
+
+  # 👇 Waits for DNS authorization to actually exist before trying to create
+  depends_on = [
+    google_certificate_manager_dns_authorization.base
+  ]
 }
 
 # 3️⃣ Managed Certificate for both apex and wildcard domains
@@ -30,7 +41,7 @@ resource "google_certificate_manager_certificate" "gateway" {
     dns_authorizations = [
       google_certificate_manager_dns_authorization.base.id
     ]
-    domains = local.gateway_tls_domains  # already ["mjknowles.dev", "*.mjknowles.dev"]
+    domains = local.gateway_tls_domains  # ["mjknowles.dev", "*.mjknowles.dev"]
   }
 
   depends_on = [
@@ -39,7 +50,7 @@ resource "google_certificate_manager_certificate" "gateway" {
   ]
 }
 
-# 4️⃣ Certificate Map and Entries (unchanged logic)
+# 4️⃣ Certificate Map and Entries
 resource "google_certificate_manager_certificate_map" "gateway" {
   name     = local.certificate_map_name
   project  = var.project_id
@@ -53,7 +64,7 @@ resource "google_certificate_manager_certificate_map" "gateway" {
 resource "google_certificate_manager_certificate_map_entry" "base" {
   name         = local.certificate_map_entry_base_name
   project      = var.project_id
-  map = google_certificate_manager_certificate_map.gateway.name
+  map          = google_certificate_manager_certificate_map.gateway.name
   hostname     = local.base_domain
   certificates = [google_certificate_manager_certificate.gateway.id]
 
@@ -66,7 +77,7 @@ resource "google_certificate_manager_certificate_map_entry" "base" {
 resource "google_certificate_manager_certificate_map_entry" "wildcard" {
   name         = local.certificate_map_entry_wildcard_name
   project      = var.project_id
-  map = google_certificate_manager_certificate_map.gateway.name
+  map          = google_certificate_manager_certificate_map.gateway.name
   hostname     = "*.${local.base_domain}"
   certificates = [google_certificate_manager_certificate.gateway.id]
 
