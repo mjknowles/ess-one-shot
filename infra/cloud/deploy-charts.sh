@@ -3,7 +3,7 @@
 set -euo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-TF_DIR="${SCRIPT_DIR}"
+TF_DIR="${SCRIPT_DIR}/base"
 HELM_TIMEOUT="15m"
 
 usage() {
@@ -185,4 +185,37 @@ helm upgrade --install ess oci://ghcr.io/element-hq/ess-helm/matrix-stack \
   -f "${ESS_VALUES}"
 
 echo "Helm release applied successfully."
-echo "Expose ${BASE_DOMAIN} and subdomains to the Gateway static IP: ${GATEWAY_IP}"
+
+# Create or update the ConfigMap
+kubectl -n "${ESS_NAMESPACE}" apply -f - <<'EOF'
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: haproxy-extra-config
+data:
+  additional.cfg: |
+    backend healthcheck
+      mode http
+      http-request return status 200 content-type "text/plain" string "ok"
+EOF
+
+# Patch the HAProxy deployment using a strategic merge patch
+kubectl -n "${ESS_NAMESPACE}" patch deployment ess-haproxy --type strategic -p '
+spec:
+  template:
+    spec:
+      volumes:
+      - name: haproxy-extra-config
+        configMap:
+          name: haproxy-extra-config
+      containers:
+      - name: haproxy
+        env:
+        - name: ADDITIONAL_CONFIG
+          value: /etc/haproxy-extra/additional.cfg
+        volumeMounts:
+        - name: haproxy-extra-config
+          mountPath: /etc/haproxy-extra
+'
+
+echo "Applied HAProxy healthcheck ConfigMap and patch."
