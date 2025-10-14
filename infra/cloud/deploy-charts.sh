@@ -186,36 +186,42 @@ helm upgrade --install ess oci://ghcr.io/element-hq/ess-helm/matrix-stack \
 
 echo "Helm release applied successfully."
 
-# Create or update the ConfigMap
-kubectl -n "${ESS_NAMESPACE}" apply -f - <<'EOF'
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: haproxy-extra-config
-data:
-  additional.cfg: |
-    backend healthcheck
-      mode http
-      http-request return status 200 content-type "text/plain" string "ok"
-EOF
-
-# Patch the HAProxy deployment using a strategic merge patch
-kubectl -n "${ESS_NAMESPACE}" patch deployment ess-haproxy --type strategic -p '
-spec:
-  template:
-    spec:
-      volumes:
-      - name: haproxy-extra-config
-        configMap:
-          name: haproxy-extra-config
-      containers:
-      - name: haproxy
-        env:
-        - name: ADDITIONAL_CONFIG
-          value: /etc/haproxy-extra/additional.cfg
-        volumeMounts:
-        - name: haproxy-extra-config
-          mountPath: /etc/haproxy-extra
-'
-
-echo "Applied HAProxy healthcheck ConfigMap and patch."
+# Apply GKE Gateway healthcheck fix overlay
+echo "Applying haproxy extra config overlay..."
+kubectl -n "${ESS_NAMESPACE}" apply -f "${SCRIPT_DIR}/haproxy-extra-configmap.yaml"
+kubectl -n ess patch deployment ess-haproxy --type='strategic' -p '{
+  "spec": {
+    "template": {
+      "spec": {
+        "volumes": [
+          {
+            "name": "haproxy-extra",
+            "configMap": {
+              "name": "haproxy-extra"
+            }
+          }
+        ],
+        "containers": [
+          {
+            "name": "haproxy",
+            "args": [
+              "-f",
+              "/usr/local/etc/haproxy/haproxy.cfg",
+              "-f",
+              "/tmp/extra.cfg",
+              "-dW"
+            ],
+            "volumeMounts": [
+              {
+                "name": "haproxy-extra",
+                "mountPath": "/tmp/extra.cfg",
+                "subPath": "custom.cfg",
+                "readOnly": true
+              }
+            ]
+          }
+        ]
+      }
+    }
+  }
+}'
