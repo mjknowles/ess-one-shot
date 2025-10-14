@@ -21,9 +21,8 @@ metadata:
 spec:
   gatewayClassName: gke-l7-global-external-managed
   addresses:
-  - type: IPAddress
-    value: ${local.gateway_ip}
-
+  - type: NamedAddress
+    value: ${local.gateway_ip_name}
   listeners:
   - name: ${local.gateway_listener_wildcard}
     hostname: "*.${local.base_domain}"

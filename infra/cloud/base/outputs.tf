@@ -26,6 +26,12 @@ output "gateway_ip_address" {
   value       = google_compute_global_address.gateway.address
 }
 
+output "gateway_ip_name" {
+  description = "Static IP address assigned to the GKE Gateway."
+  value       = google_compute_global_address.gateway.name
+}
+
+
 output "hosts" {
   description = "Ingress hostnames for the Element Server Suite components."
   value       = local.hostnames

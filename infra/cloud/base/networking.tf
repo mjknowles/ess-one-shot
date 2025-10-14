@@ -29,6 +29,8 @@ resource "google_compute_subnetwork" "primary" {
 resource "google_compute_global_address" "gateway" {
   name    = local.static_ip_name
   project = var.project_id
+  address_type = "EXTERNAL"
+  purpose      = "GKE_GATEWAY"
 
   depends_on = [google_project_service.compute]
 }
