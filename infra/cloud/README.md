@@ -96,12 +96,9 @@ helm uninstall ess -n ess || true
 # Remove the GKE and supporting resources
 tofu destroy -var-file=../terraform.tfvars
 
-mjknowles@mac cloud % gcloud compute networks peerings delete servicenetworking-googleapis-com \
+# cleanup some bullcrap that's not working
+gcloud compute networks peerings delete servicenetworking-googleapis-com \
   --network=ess-one-shot-vpc \
-  --project=ess-one-shot
-
-mjknowles@mac cloud % gcloud compute addresses delete ess-matrix-postgres-ps-range \
-  --global \
   --project=ess-one-shot
 ```
 
