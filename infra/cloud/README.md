@@ -38,6 +38,7 @@ Run with your project, bucket, and region; add `--state-admin you@example.com` i
 
 ```bash
 tofu apply -var-file=../terraform.tfvars -auto-approve
+
 ```
 
 Configure your kubeconfig as soon as the Autopilot cluster is created (no need to wait for the full `tofu apply` to finish):
@@ -100,6 +101,11 @@ tofu destroy -var-file=../terraform.tfvars
 gcloud compute networks peerings delete servicenetworking-googleapis-com \
   --network=ess-one-shot-vpc \
   --project=ess-one-shot
+
+gcloud dns record-sets delete _acme-challenge.mjknowles.dev. \
+  --zone="mjknowles-dev-zone" \
+  --project="dns-infra-474704" \
+  --type="CNAME"
 ```
 
 Remove any leftover Cloud SQL data or BigQuery tables manually if you no longer need them.

@@ -171,16 +171,12 @@ spec:
   - matches:
     - path:
         type: PathPrefix
-        value: /_matrix/client
-    - path:
-        type: PathPrefix
-        value: /_synapse
+        value: /_matrix
     backendRefs:
-    - name: ess-synapse
-      port: 8008
+    - name: ess-haproxy
+      port: 8405
 YAML
   )
-
   depends_on = [kubernetes_manifest.gateway]
 }
 

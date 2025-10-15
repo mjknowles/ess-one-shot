@@ -106,6 +106,7 @@ serverName: "${BASE_DOMAIN}"
 elementAdmin:
   ingress:
     host: "${HOST_ADMIN}"
+    className: "disabled"
   resources:
     requests:
       cpu: 25m
@@ -113,6 +114,7 @@ elementAdmin:
 elementWeb:
   ingress:
     host: "${HOST_CHAT}"
+    className: "disabled"
   resources:
     requests:
       cpu: 25m
@@ -120,6 +122,7 @@ elementWeb:
 matrixAuthenticationService:
   ingress:
     host: "${HOST_ACCOUNT}"
+    className: "disabled"
   postgres:
     host: "${CLOUDSQL_HOST}"
     port: 5432
@@ -141,6 +144,7 @@ matrixAuthenticationService:
 matrixRTC:
   ingress:
     host: "${HOST_RTC}"
+    className: "disabled"
   resources:
     requests:
       cpu: 25m
@@ -148,6 +152,7 @@ matrixRTC:
 synapse:
   ingress:
     host: "${HOST_MATRIX}"
+    className: "disabled"
   postgres:
     host: "${CLOUDSQL_HOST}"
     port: 5432
@@ -171,6 +176,8 @@ synapse:
     requests:
       cpu: 250m
       memory: 512Mi
+wellKnownDelegation:
+  enabled: false
 EOF
 
 if [[ "${SKIP_REPO_UPDATE}" -eq 0 ]]; then
@@ -185,43 +192,3 @@ helm upgrade --install ess oci://ghcr.io/element-hq/ess-helm/matrix-stack \
   -f "${ESS_VALUES}"
 
 echo "Helm release applied successfully."
-
-# Apply GKE Gateway healthcheck fix overlay
-echo "Applying haproxy extra config overlay..."
-kubectl -n "${ESS_NAMESPACE}" apply -f "${SCRIPT_DIR}/haproxy-extra-configmap.yaml"
-kubectl -n ess patch deployment ess-haproxy --type='strategic' -p '{
-  "spec": {
-    "template": {
-      "spec": {
-        "volumes": [
-          {
-            "name": "haproxy-extra",
-            "configMap": {
-              "name": "haproxy-extra"
-            }
-          }
-        ],
-        "containers": [
-          {
-            "name": "haproxy",
-            "args": [
-              "-f",
-              "/usr/local/etc/haproxy/haproxy.cfg",
-              "-f",
-              "/tmp/extra.cfg",
-              "-dW"
-            ],
-            "volumeMounts": [
-              {
-                "name": "haproxy-extra",
-                "mountPath": "/tmp/extra.cfg",
-                "subPath": "custom.cfg",
-                "readOnly": true
-              }
-            ]
-          }
-        ]
-      }
-    }
-  }
-}'
