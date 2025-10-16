@@ -3,7 +3,7 @@
 ########################
 
 resource "time_sleep" "wait_for_gateway_api" {
-  depends_on = [data.terraform_remote_state.base]
+  depends_on      = [data.terraform_remote_state.base]
   create_duration = "90s"
 }
 
@@ -171,10 +171,53 @@ spec:
   - matches:
     - path:
         type: PathPrefix
-        value: /_matrix
+        value: /_matrix/client/api/v1/login
+    - path:
+        type: PathPrefix
+        value: /_matrix/client/api/v1/refresh
+    - path:
+        type: PathPrefix
+        value: /_matrix/client/api/v1/logout
+    - path:
+        type: PathPrefix
+        value: /_matrix/client/r0/login
+    - path:
+        type: PathPrefix
+        value: /_matrix/client/r0/refresh
+    - path:
+        type: PathPrefix
+        value: /_matrix/client/r0/logout
+    - path:
+        type: PathPrefix
+        value: /_matrix/client/v3/login
+    - path:
+        type: PathPrefix
+        value: /_matrix/client/v3/refresh
+    - path:
+        type: PathPrefix
+        value: /_matrix/client/v3/logout
+    - path:
+        type: PathPrefix
+        value: /_matrix/client/unstable/login
+    - path:
+        type: PathPrefix
+        value: /_matrix/client/unstable/refresh
+    - path:
+        type: PathPrefix
+        value: /_matrix/client/unstable/logout
     backendRefs:
-    - name: ess-haproxy
-      port: 8405
+    - name: ess-matrix-authentication-service
+      port: 8080
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /_matrix
+    - path:
+        type: PathPrefix
+        value: /_synapse
+    backendRefs:
+    - name: ess-synapse
+      port: 8008
 YAML
   )
   depends_on = [kubernetes_manifest.gateway]
