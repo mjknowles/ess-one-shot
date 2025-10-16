@@ -11,8 +11,8 @@ resource "google_certificate_manager_dns_authorization" "base" {
 # 2️⃣ Create DNS record in your DNS project to prove control of the domain
 resource "google_dns_record_set" "cert_validation" {
   provider     = google.dns
-  project      = local.dns_project              # resolves to dns-infra-474704
-  managed_zone = var.dns_zone_name              # "mjknowles-dev-zone"
+  project      = local.dns_project # resolves to dns-infra-474704
+  managed_zone = var.dns_zone_name # "mjknowles-dev-zone"
 
   name    = google_certificate_manager_dns_authorization.base.dns_resource_record[0].name
   type    = google_certificate_manager_dns_authorization.base.dns_resource_record[0].type
@@ -41,7 +41,7 @@ resource "google_certificate_manager_certificate" "gateway" {
     dns_authorizations = [
       google_certificate_manager_dns_authorization.base.id
     ]
-    domains = local.gateway_tls_domains  # ["mjknowles.dev", "*.mjknowles.dev"]
+    domains = local.gateway_tls_domains # ["mjknowles.dev", "*.mjknowles.dev"]
   }
 
   depends_on = [
@@ -52,8 +52,8 @@ resource "google_certificate_manager_certificate" "gateway" {
 
 # 4️⃣ Certificate Map and Entries
 resource "google_certificate_manager_certificate_map" "gateway" {
-  name     = local.certificate_map_name
-  project  = var.project_id
+  name    = local.certificate_map_name
+  project = var.project_id
 
   depends_on = [
     google_project_service.certificatemanager,

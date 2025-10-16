@@ -177,7 +177,9 @@ synapse:
       cpu: 250m
       memory: 512Mi
 wellKnownDelegation:
-  enabled: false
+  enabled: true
+  ingress:
+    className: "disabled"
 EOF
 
 if [[ "${SKIP_REPO_UPDATE}" -eq 0 ]]; then
