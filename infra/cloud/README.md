@@ -9,6 +9,7 @@ Follow these steps to bring the Element Server Suite online on GKE Autopilot wit
 - [Helm 3.8+](https://helm.sh/)
 - IAM access to create/modify GKE, Cloud SQL, Datastream, BigQuery, DNS, and Secret Manager resources in the target project
 - A Cloud DNS managed zone that already serves the domain or subdomain you plan to dedicate to ESS
+- `helm repo add element-hq https://element-hq.github.io/helm-charts`
 
 ## 1. Set your inputs
 
@@ -60,11 +61,12 @@ Once `kubectl` reaches the cluster, run the helper script to install the Element
 
 ## 5. After apply
 
-- Deploy gateway
-  ```bash
-    # from base dir
-    tofu apply -var-file=../terraform.tfvars -auto-approve
-  ```
+Deploy gateway:
+
+```bash
+  # from gateway dir
+  tofu apply -var-file=../terraform.tfvars -auto-approve
+```
 
 - Run the helper to grant Datastream access on Cloud SQL and start the streams:
 
