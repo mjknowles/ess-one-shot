@@ -26,6 +26,34 @@ YAML
   depends_on = [kubernetes_manifest.gateway]
 }
 
+resource "kubernetes_manifest" "healthcheckpolicy_synapse" {
+  manifest = yamldecode(<<-YAML
+apiVersion: networking.gke.io/v1
+kind: HealthCheckPolicy
+metadata:
+  name: ess-synapse-hc
+  namespace: ${local.ess_namespace}
+spec:
+  default:
+    checkIntervalSec: 10
+    timeoutSec: 5
+    healthyThreshold: 1
+    unhealthyThreshold: 3
+    config:
+      type: HTTP
+      httpHealthCheck:
+        port: 8008
+        requestPath: /_matrix/client/versions
+  targetRef:
+    group: ""
+    kind: Service
+    name: ess-synapse
+YAML
+  )
+
+  depends_on = [kubernetes_manifest.gateway]
+}
+
 resource "kubernetes_manifest" "healthcheckpolicy_matrix_rtc_auth" {
   manifest = yamldecode(<<-YAML
 apiVersion: networking.gke.io/v1
