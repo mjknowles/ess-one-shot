@@ -19,7 +19,9 @@ Run these after `terraform apply` finishes provisioning the cluster:
 ### Handy URLs
 
 - `https://chat.mjknowles.dev` – Element Web client
-- `https://matrix.mjknowles.dev/_matrix/client/versions` – quick Synapse health check
+- `https://admin.mjknowles.dev` – Element Admin console
+- `https://account.mjknowles.dev` – Matrix Authentication Service (MAS) UI
+- `https://rtc.mjknowles.dev` – Matrix RTC / Element Call SFU
+- `https://matrix.mjknowles.dev` – Synapse homeserver (add `/_matrix/client/versions` for a quick health check)
 - `https://mjknowles.dev/.well-known/matrix/client` – well-known delegation payload
 - `https://mjknowles.dev/.well-known/matrix/server` – homeserver discovery response
-- `https://account.mjknowles.dev` – Matrix Authentication Service (MAS) UI
