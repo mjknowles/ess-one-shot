@@ -30,7 +30,8 @@ resource "google_compute_global_address" "gateway" {
   name         = local.static_ip_name
   project      = var.project_id
   address_type = "EXTERNAL"
-  purpose      = "GKE_GATEWAY"
+  # Purpose is intentionally omitted because the Gateway controller resets it to
+  # GCE_ENDPOINT, which would otherwise trigger perpetual replacements.
 
   depends_on = [google_project_service.compute]
 }
@@ -66,5 +67,4 @@ resource "google_service_networking_connection" "cloudsql_private_connection" {
     google_compute_global_address.cloudsql_private_range,
   ]
 }
-
 

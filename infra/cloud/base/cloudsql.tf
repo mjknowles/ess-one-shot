@@ -76,6 +76,10 @@ resource "google_sql_database" "synapse" {
   project   = var.project_id
   charset   = "UTF8"
   collation = "en_US.UTF8"
+
+  depends_on = [
+    google_sql_user.synapse
+  ]
 }
 
 resource "google_sql_database" "matrix_auth" {

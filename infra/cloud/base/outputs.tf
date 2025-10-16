@@ -130,6 +130,31 @@ output "datastream_stream_ids" {
   }
 }
 
+output "datastream_publication_prefix" {
+  description = "Prefix used for Datastream publications in Cloud SQL."
+  value       = local.datastream_publication
+}
+
+output "datastream_replication_slot_prefix" {
+  description = "Prefix used for Datastream replication slots in Cloud SQL."
+  value       = local.datastream_replication_slot
+}
+
+output "datastream_replication_user" {
+  description = "Replication user created for Datastream CDC."
+  value       = local.replication_user_name
+}
+
+output "project_id" {
+  description = "GCP project where this stack is deployed."
+  value       = var.project_id
+}
+
+output "cloudsql_instance_name" {
+  description = "Name of the Cloud SQL instance that hosts Synapse and MAS databases."
+  value       = google_sql_database_instance.ess.name
+}
+
 output "certificate_map_name" {
   value = google_certificate_manager_certificate_map.gateway.name
 }

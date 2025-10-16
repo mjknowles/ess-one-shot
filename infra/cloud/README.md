@@ -37,6 +37,7 @@ Run with your project, bucket, and region; add `--state-admin you@example.com` i
 ## 3. Apply the infrastructure
 
 ```bash
+# from base dir
 tofu apply -var-file=../terraform.tfvars -auto-approve
 
 ```
@@ -59,6 +60,12 @@ Once `kubectl` reaches the cluster, run the helper script to install the Element
 
 ## 5. After apply
 
+- Deploy gateway
+  ```bash
+    # from base dir
+    tofu apply -var-file=../terraform.tfvars -auto-approve
+  ```
+
 - Run the helper to grant Datastream access on Cloud SQL and start the streams:
 
   ```bash
@@ -71,25 +78,90 @@ Once `kubectl` reaches the cluster, run the helper script to install the Element
 
 ## 6. Tear down (when you are done)
 
-```bash
-# Optional: clean up the Helm releases before destroying infra
-helm uninstall ess -n ess || true
+- Optional: clean up the Helm releases before destroying infra.
 
-# Remove the GKE and supporting resources
-tofu destroy -var-file=../terraform.tfvars
+  ```bash
+  helm uninstall ess -n ess || true
+  ```
 
-# cleanup some bullcrap that's not working
-gcloud compute networks peerings delete servicenetworking-googleapis-com \
-  --network=ess-one-shot-vpc \
-  --project=ess-one-shot
+- Run the Datastream/Cloud SQL cleanup helper (required before `tofu destroy`):
 
-gcloud dns record-sets delete _acme-challenge.mjknowles.dev. \
-  --zone="mjknowles-dev-zone" \
-  --project="dns-infra-474704" \
-  --type="CNAME"
+  ```bash
+  ./pre-destroy.sh \
+    --project ess-one-shot \
+    --analytics-location us-central1 \
+    --cloudsql-instance ess-matrix-postgres
 ```
 
+- Destroy the Gateway stack first so the certificate map is released:
+
+  ```bash
+  tofu destroy -auto-approve -var-file=../terraform.tfvars
+  ```
+
+  It can take ~60 seconds for the managed load balancer to detach from the certificate map. If you see `RESOURCE_STILL_IN_USE`, retry once `gcloud compute target-https-proxies list` no longer shows the proxy.
+
+- Finally destroy the base stack:
+
+  ```bash
+  tofu destroy -var-file=../terraform.tfvars
+  ```
+
+- Clean up remaining networking or DNS bits if required:
+
+  ```bash
+  gcloud compute networks peerings delete servicenetworking-googleapis-com \
+    --network=ess-one-shot-vpc \
+    --project=ess-one-shot
+
+  gcloud dns record-sets delete _acme-challenge.mjknowles.dev. \
+    --zone="mjknowles-dev-zone" \
+    --project="dns-infra-474704" \
+    --type="CNAME"
+  ```
+
 Remove any leftover Cloud SQL data or BigQuery tables manually if you no longer need them.
+
+### If you delete Cloud SQL manually
+
+If you remove the Cloud SQL instance or databases outside of OpenTofu, prune the state so subsequent destroys succeed:
+
+```bash
+tofu state rm google_sql_database_instance.ess
+tofu state rm google_sql_user.replication
+```
+
+Adjust the list if you only removed a subset (for example, omit the instance line if you deleted just the databases). After the state is updated, rerun `tofu destroy` for the base stack so the remaining resources are cleaned up.
+
+For the gateway stack, remove the Kubernetes manifests and helper resources from state so Tofu does not try to manage objects that no longer exist:
+
+```bash
+tofu state rm \
+  kubernetes_manifest.gateway \
+  kubernetes_manifest.healthcheckpolicy_haproxy \
+  kubernetes_manifest.healthcheckpolicy_matrix_rtc_auth \
+  kubernetes_manifest.healthcheckpolicy_synapse \
+  kubernetes_manifest.healthcheckpolicy_well_known \
+  kubernetes_manifest.route_element_admin \
+  kubernetes_manifest.route_element_web \
+  kubernetes_manifest.route_matrix \
+  kubernetes_manifest.route_matrix_auth \
+  kubernetes_manifest.route_matrix_rtc \
+  kubernetes_manifest.route_well_known \
+  time_sleep.wait_for_gateway_api
+```
+
+Leave `data.google_client_config.default` and `data.terraform_remote_state.base` untouched; they are data-only references and do not affect state drift. Once the state is cleaned up, rerun `tofu -chdir=infra/cloud/gateway destroy` to validate nothing remains.
+
+If the base stack state has already been deleted, the remote-state data source in the gateway module no longer has outputs and `tofu destroy` will fail. In that case, remove the remaining data-only entries and skip the destroy step:
+
+```bash
+pushd infra/cloud/gateway
+tofu state rm data.google_client_config.default data.terraform_remote_state.base || true
+popd
+```
+
+With every managed resource removed from state, the gateway stack is effectively dismantled.
 
 ## Troubleshooting the chart deployment
 
