@@ -59,32 +59,13 @@ Once `kubectl` reaches the cluster, run the helper script to install the Element
 
 ## 5. After apply
 
-- Grant Datastream access to Cloud SQL (run once as the `postgres` user):
-
-  ```sql
-  ALTER ROLE datastream_replica WITH REPLICATION;
-  GRANT CONNECT ON DATABASE synapse TO datastream_replica;
-  GRANT CONNECT ON DATABASE mas TO datastream_replica;
-  GRANT USAGE ON SCHEMA public TO datastream_replica;
-  GRANT SELECT ON ALL TABLES IN SCHEMA public TO datastream_replica;
-  ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO datastream_replica;
-  ```
-
-- Start the Datastream jobs after the grants succeed:
+- Run the helper to grant Datastream access on Cloud SQL and start the streams:
 
   ```bash
-  ANALYTICS_LOC="$(tofu output -raw analytics_location)"
-
-  gcloud datastream streams update "$(tofu output -json datastream_stream_ids | jq -r '.synapse')" \
-    --location "${ANALYTICS_LOC}" \
-    --desired-state=RUNNING \
-    --project "${PROJECT_ID}"
-
-  gcloud datastream streams update "$(tofu output -json datastream_stream_ids | jq -r '.mas')" \
-    --location "${ANALYTICS_LOC}" \
-    --desired-state=RUNNING \
-    --project "${PROJECT_ID}"
+  ./post-apply.sh
   ```
+
+  Pass `--project` or `--tf-dir` if you applied from a different project or directory.
 
 - Confirm BigQuery tables are receiving data from Datastream when the streams report `state: RUNNING`.
 
