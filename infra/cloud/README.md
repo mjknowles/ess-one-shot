@@ -86,15 +86,6 @@ Deploy gateway:
   helm uninstall ess -n ess || true
   ```
 
-- Run the Datastream/Cloud SQL cleanup helper (required before `tofu destroy`):
-
-  ```bash
-  ./pre-destroy.sh \
-    --project ess-one-shot \
-    --analytics-location us-central1 \
-    --cloudsql-instance ess-matrix-postgres
-```
-
 - Destroy the Gateway stack first so the certificate map is released:
 
   ```bash
@@ -108,6 +99,8 @@ Deploy gateway:
   ```bash
   tofu destroy -var-file=../terraform.tfvars
   ```
+
+````
 
 - Clean up remaining networking or DNS bits if required:
 
@@ -173,3 +166,4 @@ If the script fails, these steps usually get things moving again:
 - Inspect the rendered values (`/tmp/.../ess-values.yaml`) referenced in the script output to confirm credentials and hostnames match expectations.
 - Verify your kubeconfig context and permissions (`kubectl auth can-i create secrets -n ess`).
 - If a release gets wedged, use `helm uninstall <release> -n <namespace>` and re-run `./infra/cloud/deploy-charts.sh`.
+````
