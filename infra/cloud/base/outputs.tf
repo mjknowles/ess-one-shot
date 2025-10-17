@@ -130,6 +130,11 @@ output "datastream_stream_ids" {
   }
 }
 
+output "datastream_private_connection" {
+  description = "Fully qualified name of the Datastream private connection used for CDC."
+  value       = google_datastream_private_connection.cloudsql.name
+}
+
 output "datastream_publication_prefix" {
   description = "Prefix used for Datastream publications in Cloud SQL."
   value       = local.datastream_publication

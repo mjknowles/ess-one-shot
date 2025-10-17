@@ -67,4 +67,3 @@ resource "google_service_networking_connection" "cloudsql_private_connection" {
     google_compute_global_address.cloudsql_private_range,
   ]
 }
-

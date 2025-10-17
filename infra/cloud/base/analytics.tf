@@ -16,6 +16,22 @@ locals {
   datastream_mas_stream_id       = substr("${local.datastream_stream_base}-mas", 0, 63)
 }
 
+resource "google_datastream_private_connection" "cloudsql" {
+  location              = local.analytics_location
+  project               = var.project_id
+  private_connection_id = local.datastream_private_connection_id
+  display_name          = "ESS Datastream Private Connection"
+
+  vpc_peering_config {
+    vpc    = google_compute_network.primary.id
+    subnet = local.datastream_psc_subnetwork_cidr
+  }
+
+  depends_on = [
+    google_project_service.datastream
+  ]
+}
+
 resource "google_datastream_connection_profile" "postgres_synapse" {
   create_without_validation = true
   location                  = local.analytics_location
@@ -31,9 +47,14 @@ resource "google_datastream_connection_profile" "postgres_synapse" {
     database = local.synapse_db_name
   }
 
+  private_connectivity {
+    private_connection = google_datastream_private_connection.cloudsql.name
+  }
+
   depends_on = [
     google_project_service.datastream,
-    google_sql_database_instance.ess
+    google_sql_database_instance.ess,
+    google_datastream_private_connection.cloudsql
   ]
 }
 
@@ -52,9 +73,14 @@ resource "google_datastream_connection_profile" "postgres_mas" {
     database = local.matrix_auth_db_name
   }
 
+  private_connectivity {
+    private_connection = google_datastream_private_connection.cloudsql.name
+  }
+
   depends_on = [
     google_project_service.datastream,
-    google_sql_database_instance.ess
+    google_sql_database_instance.ess,
+    google_datastream_private_connection.cloudsql
   ]
 }
 

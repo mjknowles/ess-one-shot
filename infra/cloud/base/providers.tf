@@ -5,6 +5,10 @@ provider "google" {
 
 data "google_client_config" "current" {}
 
+data "google_project" "current" {
+  project_id = var.project_id
+}
+
 provider "google" {
   alias   = "dns"
   project = local.dns_project
