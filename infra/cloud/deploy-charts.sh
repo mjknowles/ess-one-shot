@@ -182,6 +182,9 @@ matrixRTC:
       cpu: 25m
       memory: 32Mi
 synapse:
+  workers:
+    pusher:
+      enabled: true
   ingress:
     host: "${HOST_MATRIX}"
     className: "disabled"
