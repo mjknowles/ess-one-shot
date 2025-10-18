@@ -55,3 +55,14 @@ Service account name
 {{- default "default" .Values.serviceAccount.name -}}
 {{- end -}}
 {{- end -}}
+
+{{/*
+ConfigMap name for mounting mautrix-signal configuration.
+*/}}
+{{- define "mautrix-signal.configMapName" -}}
+{{- if .Values.configMap.name }}
+{{- .Values.configMap.name | trunc 63 | trimSuffix "-" -}}
+{{- else -}}
+{{- printf "%s-config" (include "mautrix-signal.fullname" .) | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+{{- end -}}

@@ -93,7 +93,7 @@ SYNAPSE_DB_NAME=$(tf_output_string "synapse_database_name.value")
 MAS_DB_USER=$(tf_output_string "matrix_auth_database_user.value")
 MAS_DB_NAME=$(tf_output_string "matrix_auth_database_name.value")
 
-MAUTRIX_SIGNAL_NAMESPACE=${MAUTRIX_SIGNAL_NAMESPACE:-nss}
+MAUTRIX_SIGNAL_NAMESPACE=${MAUTRIX_SIGNAL_NAMESPACE:-ess}
 MAUTRIX_SIGNAL_RELEASE_NAME=${MAUTRIX_SIGNAL_RELEASE_NAME:-mautrix-signal}
 MAUTRIX_SIGNAL_REPLICA_COUNT=${MAUTRIX_SIGNAL_REPLICA_COUNT:-1}
 MAUTRIX_SIGNAL_CONFIG_PATH=${MAUTRIX_SIGNAL_CONFIG_PATH:-${SCRIPT_DIR}/mautrix-signal/config/config.yaml}
@@ -124,9 +124,26 @@ else
 fi
 MAUTRIX_SIGNAL_CONFIGMAP_NAME="${MAUTRIX_SIGNAL_CONFIGMAP_NAME:0:63}"
 MAUTRIX_SIGNAL_CONFIGMAP_NAME="${MAUTRIX_SIGNAL_CONFIGMAP_NAME%-}"
+MAUTRIX_SIGNAL_CONFIGMAP_RESOURCE="${MAUTRIX_SIGNAL_CONFIGMAP_NAME}-config"
+MAUTRIX_SIGNAL_CONFIGMAP_RESOURCE="${MAUTRIX_SIGNAL_CONFIGMAP_RESOURCE:0:63}"
+MAUTRIX_SIGNAL_CONFIGMAP_RESOURCE="${MAUTRIX_SIGNAL_CONFIGMAP_RESOURCE%-}"
 
 TMP_DIR=$(mktemp -d)
 trap 'rm -rf "${TMP_DIR}"' EXIT
+
+MAUTRIX_SIGNAL_CONFIGMAP_MANIFEST="${TMP_DIR}/mautrix-signal-configmap.yaml"
+cat > "${MAUTRIX_SIGNAL_CONFIGMAP_MANIFEST}" <<EOF
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ${MAUTRIX_SIGNAL_CONFIGMAP_RESOURCE}
+  namespace: ${MAUTRIX_SIGNAL_NAMESPACE}
+data:
+  config.yaml: |
+${MAUTRIX_SIGNAL_CONFIG_CONTENT}
+  registration.yaml: |
+${MAUTRIX_SIGNAL_REGISTRATION_CONTENT}
+EOF
 
 ESS_VALUES="${TMP_DIR}/ess-values.yaml"
 cat > "${ESS_VALUES}" <<EOF
@@ -208,7 +225,7 @@ synapse:
         database:
           allow_unsafe_locale: true
   appservices:
-    - configMap: "${MAUTRIX_SIGNAL_CONFIGMAP_NAME}-config"
+    - configMap: "${MAUTRIX_SIGNAL_CONFIGMAP_RESOURCE}"
       configMapKey: registration.yaml
   resources:
     requests:
@@ -231,22 +248,19 @@ service:
   type: ClusterIP
   port: ${MAUTRIX_SIGNAL_SERVICE_PORT}
 configMap:
-  configYaml: |
-${MAUTRIX_SIGNAL_CONFIG_CONTENT}
-  registrationYaml: |
-${MAUTRIX_SIGNAL_REGISTRATION_CONTENT}
+  create: false
+  name: ${MAUTRIX_SIGNAL_CONFIGMAP_RESOURCE}
+resources:
+  requests:
+    cpu: 25m
+    memory: 64Mi
 EOF
 
 if [[ "${SKIP_REPO_UPDATE}" -eq 0 ]]; then
   helm repo update >/dev/null
 fi
 
-helm upgrade --install "${MAUTRIX_SIGNAL_RELEASE_NAME}" "${SCRIPT_DIR}/mautrix-signal" \
-  --namespace "${MAUTRIX_SIGNAL_NAMESPACE}" \
-  --create-namespace \
-  --wait \
-  --timeout "${HELM_TIMEOUT}" \
-  -f "${MAUTRIX_SIGNAL_VALUES}"
+kubectl apply -f "${MAUTRIX_SIGNAL_CONFIGMAP_MANIFEST}"
 
 helm upgrade --install ess oci://ghcr.io/element-hq/ess-helm/matrix-stack \
   --namespace "${ESS_NAMESPACE}" \
@@ -254,5 +268,12 @@ helm upgrade --install ess oci://ghcr.io/element-hq/ess-helm/matrix-stack \
   --wait \
   --timeout "${HELM_TIMEOUT}" \
   -f "${ESS_VALUES}"
+
+helm upgrade --install "${MAUTRIX_SIGNAL_RELEASE_NAME}" "${SCRIPT_DIR}/mautrix-signal" \
+  --namespace "${MAUTRIX_SIGNAL_NAMESPACE}" \
+  --create-namespace \
+  --wait \
+  --timeout "${HELM_TIMEOUT}" \
+  -f "${MAUTRIX_SIGNAL_VALUES}"
 
 echo "Helm releases applied successfully."

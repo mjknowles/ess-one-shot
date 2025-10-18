@@ -1,7 +1,8 @@
+{{- if .Values.configMap.create }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ include "mautrix-signal.fullname" . }}-config
+  name: {{ include "mautrix-signal.configMapName" . }}
   labels:
     {{- include "mautrix-signal.labels" . | nindent 4 }}
 data:
@@ -12,4 +13,5 @@ data:
   registration.yaml: |
 {{- if .Values.configMap.registrationYaml }}
 {{- .Values.configMap.registrationYaml | nindent 4 }}
+{{- end }}
 {{- end }}

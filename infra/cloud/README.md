@@ -53,7 +53,7 @@ gcloud container clusters get-credentials "ess-one-shot-gke2" \
 
 ## 4. Deploy the platform charts
 
-Once `kubectl` reaches the cluster, drop the mautrix-signal bridge configuration into `infra/cloud/mautrix-signal/config/` (the directory is ignored by Git) and run the helper script. The deploy helper reads those files, renders them into a ConfigMap, and installs the bridge into the `nss` namespace:
+Once `kubectl` reaches the cluster, drop the mautrix-signal bridge configuration into `infra/cloud/mautrix-signal/config/` (the directory is ignored by Git) and run the helper script. The deploy helper renders those files into a ConfigMap inside the `ess` namespace, deploys the Element Server Suite, and then upgrades the mautrix-signal bridge against that same ConfigMap:
 
 ```bash
 ./deploy-charts.sh

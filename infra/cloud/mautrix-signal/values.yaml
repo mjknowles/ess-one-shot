@@ -16,6 +16,8 @@ service:
   port: 29328
 
 configMap:
+  create: true
+  name: ""
   configYaml: ""
   registrationYaml: ""
 
