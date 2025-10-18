@@ -1,0 +1,34 @@
+nameOverride: ""
+fullnameOverride: ""
+
+replicaCount: 1
+
+image:
+  repository: dock.mau.dev/mautrix/signal
+  tag: v0.8.6
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+service:
+  enabled: true
+  type: ClusterIP
+  port: 29328
+
+configMap:
+  configYaml: ""
+  registrationYaml: ""
+
+serviceAccount:
+  create: false
+  name: ""
+
+podAnnotations: {}
+
+resources: {}
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}

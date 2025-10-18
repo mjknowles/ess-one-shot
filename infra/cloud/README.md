@@ -53,9 +53,12 @@ gcloud container clusters get-credentials "ess-one-shot-gke2" \
 
 ## 4. Deploy the platform charts
 
-Once `kubectl` reaches the cluster, run the helper script to install the Element Server Suite Helm chart with the exact settings that used to live in `helm.tf`. The GKE Gateway, static IP, and Google-managed certificates are provisioned by OpenTofu:
+Once `kubectl` reaches the cluster, drop the mautrix-signal bridge configuration into `infra/cloud/mautrix-signal/config/` (the directory is ignored by Git) and run the helper script. The deploy helper reads those files, renders them into a ConfigMap, and installs the bridge into the `nss` namespace:
 
 ```bash
+# Copy or edit your mautrix-signal YAMLs locally:
+#   infra/cloud/mautrix-signal/config/config.yaml
+#   infra/cloud/mautrix-signal/config/registration.yaml
 ./deploy-charts.sh
 ```
 
@@ -99,8 +102,6 @@ Deploy gateway:
   ```bash
   tofu destroy -var-file=../terraform.tfvars
   ```
-
-````
 
 - Clean up remaining networking or DNS bits if required:
 
@@ -166,4 +167,7 @@ If the script fails, these steps usually get things moving again:
 - Inspect the rendered values (`/tmp/.../ess-values.yaml`) referenced in the script output to confirm credentials and hostnames match expectations.
 - Verify your kubeconfig context and permissions (`kubectl auth can-i create secrets -n ess`).
 - If a release gets wedged, use `helm uninstall <release> -n <namespace>` and re-run `./infra/cloud/deploy-charts.sh`.
-````
+
+```
+
+```

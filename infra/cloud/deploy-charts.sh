@@ -93,6 +93,29 @@ SYNAPSE_DB_NAME=$(tf_output_string "synapse_database_name.value")
 MAS_DB_USER=$(tf_output_string "matrix_auth_database_user.value")
 MAS_DB_NAME=$(tf_output_string "matrix_auth_database_name.value")
 
+MAUTRIX_SIGNAL_NAMESPACE=${MAUTRIX_SIGNAL_NAMESPACE:-nss}
+MAUTRIX_SIGNAL_RELEASE_NAME=${MAUTRIX_SIGNAL_RELEASE_NAME:-mautrix-signal}
+MAUTRIX_SIGNAL_REPLICA_COUNT=${MAUTRIX_SIGNAL_REPLICA_COUNT:-1}
+MAUTRIX_SIGNAL_CONFIG_PATH=${MAUTRIX_SIGNAL_CONFIG_PATH:-${SCRIPT_DIR}/mautrix-signal/config/config.yaml}
+MAUTRIX_SIGNAL_REGISTRATION_PATH=${MAUTRIX_SIGNAL_REGISTRATION_PATH:-${SCRIPT_DIR}/mautrix-signal/config/registration.yaml}
+MAUTRIX_SIGNAL_IMAGE_REPOSITORY=${MAUTRIX_SIGNAL_IMAGE_REPOSITORY:-dock.mau.dev/mautrix/signal}
+MAUTRIX_SIGNAL_IMAGE_TAG=${MAUTRIX_SIGNAL_IMAGE_TAG:-v0.8.6}
+MAUTRIX_SIGNAL_IMAGE_PULL_POLICY=${MAUTRIX_SIGNAL_IMAGE_PULL_POLICY:-IfNotPresent}
+MAUTRIX_SIGNAL_SERVICE_PORT=${MAUTRIX_SIGNAL_SERVICE_PORT:-29328}
+
+if [[ ! -f "${MAUTRIX_SIGNAL_CONFIG_PATH}" ]]; then
+  echo "error: mautrix-signal config file not found at ${MAUTRIX_SIGNAL_CONFIG_PATH}" >&2
+  exit 1
+fi
+
+if [[ ! -f "${MAUTRIX_SIGNAL_REGISTRATION_PATH}" ]]; then
+  echo "error: mautrix-signal registration file not found at ${MAUTRIX_SIGNAL_REGISTRATION_PATH}" >&2
+  exit 1
+fi
+
+MAUTRIX_SIGNAL_CONFIG_CONTENT=$(awk '{print "    "$0} END {print ""}' "${MAUTRIX_SIGNAL_CONFIG_PATH}")
+MAUTRIX_SIGNAL_REGISTRATION_CONTENT=$(awk '{print "    "$0} END {print ""}' "${MAUTRIX_SIGNAL_REGISTRATION_PATH}")
+
 TMP_DIR=$(mktemp -d)
 trap 'rm -rf "${TMP_DIR}"' EXIT
 
@@ -182,6 +205,23 @@ wellKnownDelegation:
     className: "disabled"
 EOF
 
+MAUTRIX_SIGNAL_VALUES="${TMP_DIR}/mautrix-signal-values.yaml"
+cat > "${MAUTRIX_SIGNAL_VALUES}" <<EOF
+replicaCount: ${MAUTRIX_SIGNAL_REPLICA_COUNT}
+image:
+  repository: ${MAUTRIX_SIGNAL_IMAGE_REPOSITORY}
+  tag: ${MAUTRIX_SIGNAL_IMAGE_TAG}
+  pullPolicy: ${MAUTRIX_SIGNAL_IMAGE_PULL_POLICY}
+service:
+  type: ClusterIP
+  port: ${MAUTRIX_SIGNAL_SERVICE_PORT}
+configMap:
+  configYaml: |
+${MAUTRIX_SIGNAL_CONFIG_CONTENT}
+  registrationYaml: |
+${MAUTRIX_SIGNAL_REGISTRATION_CONTENT}
+EOF
+
 if [[ "${SKIP_REPO_UPDATE}" -eq 0 ]]; then
   helm repo update >/dev/null
 fi
@@ -193,4 +233,11 @@ helm upgrade --install ess oci://ghcr.io/element-hq/ess-helm/matrix-stack \
   --timeout "${HELM_TIMEOUT}" \
   -f "${ESS_VALUES}"
 
-echo "Helm release applied successfully."
+helm upgrade --install "${MAUTRIX_SIGNAL_RELEASE_NAME}" "${SCRIPT_DIR}/mautrix-signal" \
+  --namespace "${MAUTRIX_SIGNAL_NAMESPACE}" \
+  --create-namespace \
+  --wait \
+  --timeout "${HELM_TIMEOUT}" \
+  -f "${MAUTRIX_SIGNAL_VALUES}"
+
+echo "Helm releases applied successfully."
