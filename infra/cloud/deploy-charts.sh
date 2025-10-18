@@ -116,6 +116,15 @@ fi
 MAUTRIX_SIGNAL_CONFIG_CONTENT=$(awk '{print "    "$0} END {print ""}' "${MAUTRIX_SIGNAL_CONFIG_PATH}")
 MAUTRIX_SIGNAL_REGISTRATION_CONTENT=$(awk '{print "    "$0} END {print ""}' "${MAUTRIX_SIGNAL_REGISTRATION_PATH}")
 
+MAUTRIX_SIGNAL_CHART_NAME="mautrix-signal"
+if [[ "${MAUTRIX_SIGNAL_RELEASE_NAME}" == *"${MAUTRIX_SIGNAL_CHART_NAME}"* ]]; then
+  MAUTRIX_SIGNAL_CONFIGMAP_NAME="${MAUTRIX_SIGNAL_RELEASE_NAME}"
+else
+  MAUTRIX_SIGNAL_CONFIGMAP_NAME="${MAUTRIX_SIGNAL_RELEASE_NAME}-${MAUTRIX_SIGNAL_CHART_NAME}"
+fi
+MAUTRIX_SIGNAL_CONFIGMAP_NAME="${MAUTRIX_SIGNAL_CONFIGMAP_NAME:0:63}"
+MAUTRIX_SIGNAL_CONFIGMAP_NAME="${MAUTRIX_SIGNAL_CONFIGMAP_NAME%-}"
+
 TMP_DIR=$(mktemp -d)
 trap 'rm -rf "${TMP_DIR}"' EXIT
 
@@ -195,6 +204,9 @@ synapse:
       config: |-
         database:
           allow_unsafe_locale: true
+  appservices:
+    - configMap: "${MAUTRIX_SIGNAL_CONFIGMAP_NAME}-config"
+      configMapKey: registration.yaml
   resources:
     requests:
       cpu: 250m
@@ -226,18 +238,18 @@ if [[ "${SKIP_REPO_UPDATE}" -eq 0 ]]; then
   helm repo update >/dev/null
 fi
 
-helm upgrade --install ess oci://ghcr.io/element-hq/ess-helm/matrix-stack \
-  --namespace "${ESS_NAMESPACE}" \
-  --create-namespace \
-  --wait \
-  --timeout "${HELM_TIMEOUT}" \
-  -f "${ESS_VALUES}"
-
 helm upgrade --install "${MAUTRIX_SIGNAL_RELEASE_NAME}" "${SCRIPT_DIR}/mautrix-signal" \
   --namespace "${MAUTRIX_SIGNAL_NAMESPACE}" \
   --create-namespace \
   --wait \
   --timeout "${HELM_TIMEOUT}" \
   -f "${MAUTRIX_SIGNAL_VALUES}"
+
+helm upgrade --install ess oci://ghcr.io/element-hq/ess-helm/matrix-stack \
+  --namespace "${ESS_NAMESPACE}" \
+  --create-namespace \
+  --wait \
+  --timeout "${HELM_TIMEOUT}" \
+  -f "${ESS_VALUES}"
 
 echo "Helm releases applied successfully."

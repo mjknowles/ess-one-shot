@@ -56,11 +56,10 @@ gcloud container clusters get-credentials "ess-one-shot-gke2" \
 Once `kubectl` reaches the cluster, drop the mautrix-signal bridge configuration into `infra/cloud/mautrix-signal/config/` (the directory is ignored by Git) and run the helper script. The deploy helper reads those files, renders them into a ConfigMap, and installs the bridge into the `nss` namespace:
 
 ```bash
-# Copy or edit your mautrix-signal YAMLs locally:
-#   infra/cloud/mautrix-signal/config/config.yaml
-#   infra/cloud/mautrix-signal/config/registration.yaml
 ./deploy-charts.sh
 ```
+
+The Synapse release automatically references the generated ConfigMap (`registration.yaml`) under `synapse.appservices`, so the bridge appears as an application service without manual edits.
 
 ## 5. After apply
 
