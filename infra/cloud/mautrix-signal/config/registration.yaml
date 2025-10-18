@@ -5,10 +5,10 @@ hs_token: kLyud3Qtp3DWb2jZihfpk6Op3dHP4wH4EI7dAgnCtiZSEy2ljzgl2vwMxB8pKfq5
 sender_localpart: dP3YpgMH6HQIVVcdNSx3ESC7hJNgPnuR
 rate_limited: false
 namespaces:
-    users:
-        - regex: ^@signalbot:matrix\.example\.com$
-          exclusive: true
-        - regex: ^@signal_.*:matrix\.example\.com$
-          exclusive: true
+  users:
+    - regex: ^@signalbot:mjknowles\.dev$
+      exclusive: true
+    - regex: ^@signal_.*:mjknowles\.dev$
+      exclusive: true
 de.sorunome.msc2409.push_ephemeral: true
 receive_ephemeral: true
