@@ -3,11 +3,8 @@ set -euo pipefail
 
 CLUSTER_NAME="ess-one-shot"
 NAMESPACE="ess"
-DOMAIN="127-0-0-1.nip.io"
-VALUES_DIR="${PWD}/.ess-values"
-VALUES_FILE="${VALUES_DIR}/hostnames.yaml"
+VALUES_DIR="${PWD}/ess-values"
 CHART_REF="oci://ghcr.io/element-hq/ess-helm/matrix-stack"
-INGRESS_MANIFEST="https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.11.1/deploy/static/provider/kind/deploy.yaml"
 SKIP_CLUSTER_CREATION="false"
 FORCE_VALUES="false"
 EXTRA_HELM_ARGS=()
@@ -58,12 +55,6 @@ parse_args() {
         NAMESPACE="$2"
         shift 2
         ;;
-      --values-file)
-        [[ $# -lt 2 ]] && fatal "--values-file requires an argument"
-        VALUES_FILE="$(realpath "$2")"
-        VALUES_DIR="$(dirname "$VALUES_FILE")"
-        shift 2
-        ;;
       --skip-cluster)
         SKIP_CLUSTER_CREATION="true"
         shift
@@ -111,10 +102,10 @@ nodes:
 - role: control-plane
   extraPortMappings:
   - containerPort: 80
-    hostPort: 80
+    hostPort: 8080
     protocol: TCP
   - containerPort: 443
-    hostPort: 443
+    hostPort: 8443
     protocol: TCP
 EOF
   fi
@@ -122,19 +113,52 @@ EOF
   kubectl config use-context "kind-${CLUSTER_NAME}" >/dev/null
 }
 
-# ensure_ingress_nginx() {
-#   if kubectl get ns ingress-nginx >/dev/null 2>&1; then
-#     echo "ingress-nginx already present."
-#     return
-#   fi
+ensure_ingress_nginx() {
+  if kubectl get deployment -n ingress-nginx ingress-nginx-controller >/dev/null 2>&1; then
+    echo "ingress-nginx already present. Waiting for controller to become available..."
+  else
+    echo "Installing ingress-nginx controller for kind..."
+    kubectl apply -f "$INGRESS_MANIFEST"
+  fi
 
-#   echo "Installing ingress-nginx controller for kind..."
-#   kubectl apply -f "$INGRESS_MANIFEST"
-#   kubectl wait --namespace ingress-nginx \
-#     --for=condition=Ready pods \
-#     --selector=app.kubernetes.io/component=controller \
-#     --timeout=180s
-# }
+  kubectl wait \
+    --namespace ingress-nginx \
+    --for=condition=Available \
+    deployment/ingress-nginx-controller \
+    --timeout=180s
+}
+
+ensure_cert_manager() {
+  echo "Ensuring cert-manager Helm repository..."
+  helm repo add jetstack https://charts.jetstack.io --force-update >/dev/null
+
+  echo "Ensuring cert-manager release in namespace 'cert-manager'..."
+  helm upgrade \
+    --install \
+    cert-manager \
+    jetstack/cert-manager \
+    --namespace cert-manager \
+    --create-namespace \
+    --version v1.17.0 \
+    --wait \
+    --set crds.enabled=true
+
+  cat <<'EOF' | kubectl apply -f -
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-prod
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    privateKeySecretRef:
+      name: letsencrypt-prod-private-key
+    solvers:
+      - http01:
+          ingress:
+            class: traefik
+EOF
+}
 
 ensure_namespace() {
   if kubectl get ns "$NAMESPACE" >/dev/null 2>&1; then
@@ -144,47 +168,25 @@ ensure_namespace() {
   kubectl create namespace "$NAMESPACE"
 }
 
-ensure_values_file() {
-  mkdir -p "$VALUES_DIR"
-
-  if [[ -f "$VALUES_FILE" && "$FORCE_VALUES" != "true" ]]; then
-    echo "Values file already exists at $VALUES_FILE (use --force-values to regenerate)."
-    return
-  fi
-
-  cat >"$VALUES_FILE" <<EOF
-elementAdmin:
-  ingress:
-    host: admin.${DOMAIN}
-elementWeb:
-  ingress:
-    host: chat.${DOMAIN}
-matrixAuthenticationService:
-  ingress:
-    host: account.${DOMAIN}
-matrixRTC:
-  ingress:
-    host: rtc.${DOMAIN}
-serverName: ${DOMAIN}
-synapse:
-  ingress:
-    host: matrix.${DOMAIN}
-EOF
-
-  echo "Wrote ESS hostnames values file to $VALUES_FILE."
-}
 
 install_ess_chart() {
   echo "Deploying ESS chart into namespace '$NAMESPACE'..."
-  helm upgrade \
-    --install \
-    ess \
-    "$CHART_REF" \
-    --namespace "$NAMESPACE" \
-    --create-namespace \
-    --wait \
-    -f "$VALUES_FILE" \
-    "${EXTRA_HELM_ARGS[@]}"
+  local helm_cmd=(
+    helm
+    upgrade
+    --install
+    ess
+    "$CHART_REF"
+    --namespace "$NAMESPACE"
+    --create-namespace
+    --wait
+    -f "$VALUES_FILE"
+  )
+  if ((${#EXTRA_HELM_ARGS[@]} > 0)); then
+    helm_cmd+=("${EXTRA_HELM_ARGS[@]}")
+  fi
+
+  "${helm_cmd[@]}"
 
   echo "ESS chart installation command completed."
 }
@@ -193,9 +195,9 @@ main() {
   parse_args "$@"
   ensure_dependencies
   ensure_kind_cluster
-  # ensure_ingress_nginx
+  ensure_ingress_nginx
+  ensure_cert_manager
   ensure_namespace
-  ensure_values_file
   install_ess_chart
 
   cat <<EOF

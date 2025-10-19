@@ -1,0 +1,21 @@
+elementAdmin:
+  ingress:
+    host: admin.localhost
+    className: nginx
+elementWeb:
+  ingress:
+    host: chat.localhost
+    className: nginx
+matrixAuthenticationService:
+  ingress:
+    host: account.localhost
+    className: nginx
+matrixRTC:
+  ingress:
+    host: rtc.localhost
+    className: nginx
+serverName: localhost
+synapse:
+  ingress:
+    host: matrix.localhost
+    className: nginx
