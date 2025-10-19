@@ -109,39 +109,32 @@ kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
 nodes:
 - role: control-plane
-  kubeadmConfigPatches:
-  - |
-    kind: InitConfiguration
-    nodeRegistration:
-      kubeletExtraArgs:
-        node-labels: "ingress-ready=true"
-- role: worker
-extraPortMappings:
-- containerPort: 80
-  hostPort: 8080
-  protocol: TCP
-- containerPort: 443
-  hostPort: 8443
-  protocol: TCP
+  extraPortMappings:
+  - containerPort: 80
+    hostPort: 80
+    protocol: TCP
+  - containerPort: 443
+    hostPort: 443
+    protocol: TCP
 EOF
   fi
 
   kubectl config use-context "kind-${CLUSTER_NAME}" >/dev/null
 }
 
-ensure_ingress_nginx() {
-  if kubectl get ns ingress-nginx >/dev/null 2>&1; then
-    echo "ingress-nginx already present."
-    return
-  fi
+# ensure_ingress_nginx() {
+#   if kubectl get ns ingress-nginx >/dev/null 2>&1; then
+#     echo "ingress-nginx already present."
+#     return
+#   fi
 
-  echo "Installing ingress-nginx controller for kind..."
-  kubectl apply -f "$INGRESS_MANIFEST"
-  kubectl wait --namespace ingress-nginx \
-    --for=condition=Ready pods \
-    --selector=app.kubernetes.io/component=controller \
-    --timeout=180s
-}
+#   echo "Installing ingress-nginx controller for kind..."
+#   kubectl apply -f "$INGRESS_MANIFEST"
+#   kubectl wait --namespace ingress-nginx \
+#     --for=condition=Ready pods \
+#     --selector=app.kubernetes.io/component=controller \
+#     --timeout=180s
+# }
 
 ensure_namespace() {
   if kubectl get ns "$NAMESPACE" >/dev/null 2>&1; then
@@ -200,7 +193,7 @@ main() {
   parse_args "$@"
   ensure_dependencies
   ensure_kind_cluster
-  ensure_ingress_nginx
+  # ensure_ingress_nginx
   ensure_namespace
   ensure_values_file
   install_ess_chart

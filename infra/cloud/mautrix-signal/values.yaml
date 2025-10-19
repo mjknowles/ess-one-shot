@@ -18,8 +18,17 @@ service:
 configMap:
   create: true
   name: ""
+  configKey: config.yaml
+  configFileName: config.yaml
+  registrationKey: registration.yaml
+  registrationFileName: registration.yaml
   configYaml: ""
   registrationYaml: ""
+
+initContainers:
+  copyConfig:
+    image: busybox:1.36.1
+    imagePullPolicy: IfNotPresent
 
 serviceAccount:
   create: false

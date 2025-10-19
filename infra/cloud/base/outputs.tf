@@ -57,6 +57,11 @@ output "matrix_auth_database_secret_name" {
   value       = kubernetes_secret.matrix_auth_db.metadata[0].name
 }
 
+output "mautrix_signal_database_secret_name" {
+  description = "Kubernetes secret that holds mautrix-signal database credentials."
+  value       = kubernetes_secret.mautrix_signal_db.metadata[0].name
+}
+
 output "synapse_service_account_email" {
   description = "GCP service account used by the Synapse workload."
   value       = google_service_account.synapse.email
@@ -110,6 +115,16 @@ output "matrix_auth_database_user" {
 output "matrix_auth_database_name" {
   description = "Database name for MAS."
   value       = local.matrix_auth_db_name
+}
+
+output "mautrix_signal_database_user" {
+  description = "Database user name for the mautrix-signal bridge."
+  value       = local.mautrix_signal_db_user
+}
+
+output "mautrix_signal_database_name" {
+  description = "Database name for the mautrix-signal bridge."
+  value       = local.mautrix_signal_db_name
 }
 
 output "bigquery_dataset_id" {

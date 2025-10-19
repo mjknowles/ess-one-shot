@@ -10,6 +10,12 @@ resource "random_password" "matrix_auth_db_user" {
   override_special = "!@#%^*_-+=?"
 }
 
+resource "random_password" "mautrix_signal_db_user" {
+  length           = 24
+  special          = true
+  override_special = "!@#%^*_-+=?"
+}
+
 resource "random_password" "replication_user" {
   length           = 24
   special          = true
@@ -94,6 +100,18 @@ resource "google_sql_database" "matrix_auth" {
   ]
 }
 
+resource "google_sql_database" "mautrix_signal" {
+  name      = local.mautrix_signal_db_name
+  instance  = google_sql_database_instance.ess.name
+  project   = var.project_id
+  charset   = "UTF8"
+  collation = "en_US.UTF8"
+
+  depends_on = [
+    google_sql_user.mautrix_signal
+  ]
+}
+
 resource "google_sql_user" "synapse" {
   name     = local.synapse_db_user
   instance = google_sql_database_instance.ess.name
@@ -106,6 +124,13 @@ resource "google_sql_user" "matrix_auth" {
   instance = google_sql_database_instance.ess.name
   project  = var.project_id
   password = random_password.matrix_auth_db_user.result
+}
+
+resource "google_sql_user" "mautrix_signal" {
+  name     = local.mautrix_signal_db_user
+  instance = google_sql_database_instance.ess.name
+  project  = var.project_id
+  password = random_password.mautrix_signal_db_user.result
 }
 
 resource "google_sql_user" "replication" {

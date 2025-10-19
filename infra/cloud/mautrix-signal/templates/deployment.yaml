@@ -18,11 +18,32 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
     spec:
+      {{- $configKey := default "config.yaml" .Values.configMap.configKey }}
+      {{- $configFileName := default "config.yaml" .Values.configMap.configFileName }}
+      {{- $registrationKey := default "registration.yaml" .Values.configMap.registrationKey }}
+      {{- $registrationFileName := default "registration.yaml" .Values.configMap.registrationFileName }}
+      {{- $needsItems := or (or (ne $configKey "config.yaml") (ne $configFileName "config.yaml")) (or (ne $registrationKey "registration.yaml") (ne $registrationFileName "registration.yaml")) }}
       serviceAccountName: {{ include "mautrix-signal.serviceAccountName" . }}
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      initContainers:
+        - name: copy-config
+          image: {{ default "busybox:1.36.1" .Values.initContainers.copyConfig.image }}
+          imagePullPolicy: {{ default "IfNotPresent" .Values.initContainers.copyConfig.imagePullPolicy }}
+          command:
+            - sh
+            - -c
+            - |
+              set -eu
+              if [ -f "/config-src/{{ $configFileName }}" ]; then cp "/config-src/{{ $configFileName }}" "/data/{{ $configFileName }}"; fi
+              if [ -f "/config-src/{{ $registrationFileName }}" ]; then cp "/config-src/{{ $registrationFileName }}" "/data/{{ $registrationFileName }}"; fi
+          volumeMounts:
+            - name: config
+              mountPath: /config-src
+            - name: data
+              mountPath: /data
       containers:
         - name: {{ include "mautrix-signal.name" . }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
@@ -31,8 +52,8 @@ spec:
             - containerPort: {{ .Values.service.port }}
               name: http
           volumeMounts:
-            - name: config
-              mountPath: /config
+            - name: data
+              mountPath: /data
           {{- with .Values.resources }}
           resources:
             {{- toYaml . | nindent 12 }}
@@ -41,6 +62,15 @@ spec:
         - name: config
           configMap:
             name: {{ include "mautrix-signal.configMapName" . }}
+            {{- if $needsItems }}
+            items:
+              - key: {{ $configKey }}
+                path: {{ $configFileName }}
+              - key: {{ $registrationKey }}
+                path: {{ $registrationFileName }}
+            {{- end }}
+        - name: data
+          emptyDir: {}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

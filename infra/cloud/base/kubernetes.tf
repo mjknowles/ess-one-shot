@@ -50,3 +50,26 @@ resource "kubernetes_secret" "matrix_auth_db" {
     google_sql_user.matrix_auth
   ]
 }
+
+resource "kubernetes_secret" "mautrix_signal_db" {
+  metadata {
+    name      = local.mautrix_signal_secret_name
+    namespace = kubernetes_namespace.ess.metadata[0].name
+  }
+
+  type = "Opaque"
+
+  data = {
+    username = local.mautrix_signal_db_user
+    password = random_password.mautrix_signal_db_user.result
+    database = local.mautrix_signal_db_name
+    host     = google_sql_database_instance.ess.private_ip_address
+    port     = "5432"
+  }
+
+  depends_on = [
+    kubernetes_namespace.ess,
+    google_sql_user.mautrix_signal,
+    google_sql_database.mautrix_signal
+  ]
+}

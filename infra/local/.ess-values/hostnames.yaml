@@ -1,0 +1,16 @@
+elementAdmin:
+  ingress:
+    host: admin.127-0-0-1.nip.io
+elementWeb:
+  ingress:
+    host: chat.127-0-0-1.nip.io
+matrixAuthenticationService:
+  ingress:
+    host: account.127-0-0-1.nip.io
+matrixRTC:
+  ingress:
+    host: rtc.127-0-0-1.nip.io
+serverName: 127-0-0-1.nip.io
+synapse:
+  ingress:
+    host: matrix.127-0-0-1.nip.io

@@ -22,8 +22,7 @@ Optional but nice:
 The script will:
 
 - Verify that `kind`, `kubectl`, and `helm` are available.
-- Create or reuse a `kind` cluster named `ess-one-shot` (one control-plane + one worker node) and expose ingress ports `8080`/`8443` to your host.
-- Install the [ingress-nginx](https://kubernetes.github.io/ingress-nginx/) controller tailored for `kind`.
+- Create or reuse a `kind` cluster named `ess-one-shot` (one control-plane + one worker node) and expose ingress ports `80`/`443` to your host.
 - Generate `.ess-values/hostnames.yaml` with a set of hostnames that point at `127-0-0-1.nip.io` (no `/etc/hosts` edits required).
 - Run `helm upgrade --install` against `oci://ghcr.io/element-hq/ess-helm/matrix-stack` in the `ess` namespace and wait for resources to become ready.
 

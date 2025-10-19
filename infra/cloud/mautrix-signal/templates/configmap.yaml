@@ -6,11 +6,13 @@ metadata:
   labels:
     {{- include "mautrix-signal.labels" . | nindent 4 }}
 data:
-  config.yaml: |
+  {{- $configKey := default "config.yaml" .Values.configMap.configKey }}
+  {{- $registrationKey := default "registration.yaml" .Values.configMap.registrationKey }}
+  {{ $configKey }}: |
 {{- if .Values.configMap.configYaml }}
 {{- .Values.configMap.configYaml | nindent 4 }}
 {{- end }}
-  registration.yaml: |
+  {{ $registrationKey }}: |
 {{- if .Values.configMap.registrationYaml }}
 {{- .Values.configMap.registrationYaml | nindent 4 }}
 {{- end }}

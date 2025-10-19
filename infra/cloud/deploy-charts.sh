@@ -64,6 +64,8 @@ require_binary tofu
 require_binary jq
 require_binary helm
 require_binary kubectl
+require_binary python3
+require_binary base64
 
 TF_OUTPUT_JSON=$(tofu -chdir="${TF_DIR}" output -json)
 
@@ -92,6 +94,9 @@ SYNAPSE_DB_USER=$(tf_output_string "synapse_database_user.value")
 SYNAPSE_DB_NAME=$(tf_output_string "synapse_database_name.value")
 MAS_DB_USER=$(tf_output_string "matrix_auth_database_user.value")
 MAS_DB_NAME=$(tf_output_string "matrix_auth_database_name.value")
+MAUTRIX_SIGNAL_SECRET_NAME=$(tf_output_string "mautrix_signal_database_secret_name.value")
+MAUTRIX_SIGNAL_DB_USER=$(tf_output_string "mautrix_signal_database_user.value")
+MAUTRIX_SIGNAL_DB_NAME=$(tf_output_string "mautrix_signal_database_name.value")
 
 MAUTRIX_SIGNAL_NAMESPACE=${MAUTRIX_SIGNAL_NAMESPACE:-ess}
 MAUTRIX_SIGNAL_RELEASE_NAME=${MAUTRIX_SIGNAL_RELEASE_NAME:-mautrix-signal}
@@ -112,6 +117,39 @@ if [[ ! -f "${MAUTRIX_SIGNAL_REGISTRATION_PATH}" ]]; then
   echo "error: mautrix-signal registration file not found at ${MAUTRIX_SIGNAL_REGISTRATION_PATH}" >&2
   exit 1
 fi
+
+MAUTRIX_SIGNAL_DB_PASSWORD_B64=$(kubectl get secret "${MAUTRIX_SIGNAL_SECRET_NAME}" -n "${ESS_NAMESPACE}" -o jsonpath='{.data.password}' 2>/dev/null || true)
+if [[ -z "${MAUTRIX_SIGNAL_DB_PASSWORD_B64}" ]]; then
+  echo "error: failed to read mautrix-signal database secret ${MAUTRIX_SIGNAL_SECRET_NAME} in namespace ${ESS_NAMESPACE}" >&2
+  exit 1
+fi
+MAUTRIX_SIGNAL_DB_PASSWORD=$(printf '%s' "${MAUTRIX_SIGNAL_DB_PASSWORD_B64}" | base64 -d)
+
+MAUTRIX_SIGNAL_DB_URI=$(python3 - "$MAUTRIX_SIGNAL_DB_USER" "$MAUTRIX_SIGNAL_DB_PASSWORD" "$CLOUDSQL_HOST" "$MAUTRIX_SIGNAL_DB_NAME" <<'PY'
+import sys
+from urllib.parse import quote_plus
+
+user, password, host, database = sys.argv[1:5]
+print(f"postgres://{quote_plus(user)}:{quote_plus(password)}@{host}/{quote_plus(database)}?sslmode=disable")
+PY
+)
+
+python3 - "${MAUTRIX_SIGNAL_CONFIG_PATH}" "${MAUTRIX_SIGNAL_DB_URI}" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+uri = sys.argv[2]
+text = path.read_text()
+pattern = re.compile(r'(?m)^(\s*uri:\s*).+$')
+new_text, count = pattern.subn(r'\1' + uri, text, count=1)
+if count == 0:
+    raise SystemExit("error: unable to update database uri in mautrix-signal config")
+if text.endswith("\n") and not new_text.endswith("\n"):
+    new_text += "\n"
+path.write_text(new_text)
+PY
 
 MAUTRIX_SIGNAL_CONFIG_CONTENT=$(awk '{print "    "$0} END {print ""}' "${MAUTRIX_SIGNAL_CONFIG_PATH}")
 MAUTRIX_SIGNAL_REGISTRATION_CONTENT=$(awk '{print "    "$0} END {print ""}' "${MAUTRIX_SIGNAL_REGISTRATION_PATH}")
