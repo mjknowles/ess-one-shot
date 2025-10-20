@@ -5,33 +5,11 @@ CLUSTER_NAME="ess-one-shot"
 NAMESPACE="ess"
 VALUES_DIR="${PWD}/ess-values"
 CHART_REF="oci://ghcr.io/element-hq/ess-helm/matrix-stack"
-SKIP_CLUSTER_CREATION="false"
-FORCE_VALUES="false"
-EXTRA_HELM_ARGS=()
 CA_DIR="${PWD}/.ca"
 CA_CERT_FILE="${CA_DIR}/ca.crt"
 CA_KEY_FILE="${CA_DIR}/ca.pem"
 CA_FINGERPRINT_FILE="${CA_DIR}/ca.sha256"
 TRUST_CA="${ESS_TRUST_CA:-true}"
-
-usage() {
-  cat <<'EOF'
-Usage: launch-local.sh [options] [-- extra helm args...]
-
-Spin up a kind cluster suitable for running the Element Server Suite Helm chart.
-
-Options:
-  --cluster-name NAME      Name for the kind cluster (default: ess-one-shot)
-  --domain DOMAIN          Base domain for ingress hosts (default: 127-0-0-1.nip.io)
-  --namespace NAME         Namespace to install ESS into (default: ess)
-  --values-file PATH       Path for generated hostnames values file (default: ./.ess-values/hostnames.yaml)
-  --skip-cluster           Reuse the current kube context instead of creating kind
-  --force-values           Overwrite the values file even if it already exists
-  -h, --help               Show this help and exit
-
-Anything after `--` is passed straight to the final `helm upgrade --install` command.
-EOF
-}
 
 fatal() {
   echo "ERROR: $*" >&2
@@ -120,48 +98,6 @@ install_ca_trust_store() {
   esac
 }
 
-parse_args() {
-  while [[ $# -gt 0 ]]; do
-    case "$1" in
-      --cluster-name)
-        [[ $# -lt 2 ]] && fatal "--cluster-name requires an argument"
-        CLUSTER_NAME="$2"
-        shift 2
-        ;;
-      --domain)
-        [[ $# -lt 2 ]] && fatal "--domain requires an argument"
-        DOMAIN="$2"
-        shift 2
-        ;;
-      --namespace)
-        [[ $# -lt 2 ]] && fatal "--namespace requires an argument"
-        NAMESPACE="$2"
-        shift 2
-        ;;
-      --skip-cluster)
-        SKIP_CLUSTER_CREATION="true"
-        shift
-        ;;
-      --force-values)
-        FORCE_VALUES="true"
-        shift
-        ;;
-      -h|--help)
-        usage
-        exit 0
-        ;;
-      --)
-        shift
-        EXTRA_HELM_ARGS=("$@")
-        return
-        ;;
-      *)
-        fatal "Unknown option: $1"
-        ;;
-    esac
-  done
-}
-
 ensure_dependencies() {
   for bin in kind kubectl helm python3 openssl; do
     command_exists "$bin" || fatal "Missing dependency: $bin"
@@ -169,11 +105,6 @@ ensure_dependencies() {
 }
 
 ensure_kind_cluster() {
-  if [[ "$SKIP_CLUSTER_CREATION" == "true" ]]; then
-    echo "Skipping kind cluster creation (per --skip-cluster)."
-    return
-  fi
-
   if kind get clusters | grep -Fxq "$CLUSTER_NAME"; then
     echo "Reusing existing kind cluster '$CLUSTER_NAME'."
   else
@@ -357,7 +288,6 @@ ensure_namespace() {
   kubectl create namespace "$NAMESPACE"
 }
 
-
 install_ess_chart() {
   echo "Deploying ESS chart into namespace '$NAMESPACE'..."
   local helm_cmd=(
@@ -371,23 +301,10 @@ install_ess_chart() {
     --wait
   )
 
-  local -a values_files=()
   if [[ -d "$VALUES_DIR" ]]; then
     while IFS= read -r file; do
-      values_files+=("$file")
+      helm_cmd+=(-f "$file")
     done < <(find "$VALUES_DIR" -maxdepth 1 -type f \( -name '*.yml' -o -name '*.yaml' \) | LC_ALL=C sort)
-  fi
-
-  if ((${#values_files[@]} == 0)); then
-    values_files+=("$VALUES_FILE")
-  fi
-
-  for file in "${values_files[@]}"; do
-    helm_cmd+=(-f "$file")
-  done
-
-  if ((${#EXTRA_HELM_ARGS[@]} > 0)); then
-    helm_cmd+=("${EXTRA_HELM_ARGS[@]}")
   fi
 
   "${helm_cmd[@]}"
@@ -396,7 +313,6 @@ install_ess_chart() {
 }
 
 main() {
-  parse_args "$@"
   ensure_dependencies
   ensure_kind_cluster
   ensure_ingress_nginx
