@@ -118,7 +118,7 @@ ensure_ingress_nginx() {
     echo "ingress-nginx already present. Waiting for controller to become available..."
   else
     echo "Installing ingress-nginx controller for kind..."
-    kubectl apply -f "$INGRESS_MANIFEST"
+    kubectl apply -f https://kind.sigs.k8s.io/examples/ingress/deploy-ingress-nginx.yaml
   fi
 
   kubectl wait \
@@ -180,8 +180,23 @@ install_ess_chart() {
     --namespace "$NAMESPACE"
     --create-namespace
     --wait
-    -f "$VALUES_FILE"
   )
+
+  local -a values_files=()
+  if [[ -d "$VALUES_DIR" ]]; then
+    while IFS= read -r file; do
+      values_files+=("$file")
+    done < <(find "$VALUES_DIR" -maxdepth 1 -type f \( -name '*.yml' -o -name '*.yaml' \) | LC_ALL=C sort)
+  fi
+
+  if ((${#values_files[@]} == 0)); then
+    values_files+=("$VALUES_FILE")
+  fi
+
+  for file in "${values_files[@]}"; do
+    helm_cmd+=(-f "$file")
+  done
+
   if ((${#EXTRA_HELM_ARGS[@]} > 0)); then
     helm_cmd+=("${EXTRA_HELM_ARGS[@]}")
   fi
@@ -205,14 +220,11 @@ main() {
 ESS should now be installing in namespace '$NAMESPACE'.
 
 Ingress endpoints (once ready):
-  Element Web:      https://chat.${DOMAIN}
-  Admin console:    https://admin.${DOMAIN}
-  Synapse (Matrix): https://matrix.${DOMAIN}
-  MAS:              https://account.${DOMAIN}
-  RTC:              https://rtc.${DOMAIN}
-
-If you're using the default 127-0-0-1.nip.io domain, no /etc/hosts changes are required.
-Otherwise point the hostnames above to 127.0.0.1 and access ingress via ports 8080 (HTTP) and 8443 (HTTPS).
+  Element Web:      https://chat.<DOMAIN>
+  Admin console:    https://admin.<DOMAIN>
+  Synapse (Matrix): https://matrix.<DOMAIN>
+  MAS:              https://account.<DOMAIN>
+  RTC:              https://rtc.<DOMAIN>
 
 EOF
 }
