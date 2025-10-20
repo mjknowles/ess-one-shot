@@ -1,2 +1,2 @@
 certManager:
-  clusterIssuer: letsencrypt-prod
+  clusterIssuer: ess-selfsigned

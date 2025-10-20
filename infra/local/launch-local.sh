@@ -156,7 +156,7 @@ spec:
     solvers:
       - http01:
           ingress:
-            class: traefik
+            class: nginx
 EOF
 }
 
@@ -220,11 +220,11 @@ main() {
 ESS should now be installing in namespace '$NAMESPACE'.
 
 Ingress endpoints (once ready):
-  Element Web:      https://chat.<DOMAIN>
-  Admin console:    https://admin.<DOMAIN>
-  Synapse (Matrix): https://matrix.<DOMAIN>
-  MAS:              https://account.<DOMAIN>
-  RTC:              https://rtc.<DOMAIN>
+  Element Web:      https://chat.ess.localhost/
+  Admin console:    https://admin.ess.localhost/
+  Synapse (Matrix): https://matrix.ess.localhost/
+  MAS:              https://account.ess.localhost/
+  RTC:              https://rtc.ess.localhost/
 
 EOF
 }

@@ -1,21 +1,28 @@
+serverName: ess.localhost
+
+ingress:
+  controllerType: ingress-nginx
+
 elementAdmin:
   ingress:
-    host: admin.localhost
+    host: admin.ess.localhost
     className: nginx
 elementWeb:
   ingress:
-    host: chat.localhost
+    host: chat.ess.localhost
     className: nginx
 matrixAuthenticationService:
   ingress:
-    host: account.localhost
+    host: account.ess.localhost
     className: nginx
 matrixRTC:
   ingress:
-    host: rtc.localhost
+    host: rtc.ess.localhost
     className: nginx
-serverName: localhost
 synapse:
   ingress:
-    host: matrix.localhost
+    host: matrix.ess.localhost
+    className: nginx
+wellKnownDelegation:
+  ingress:
     className: nginx
