@@ -20,6 +20,16 @@ command_exists() {
   command -v "$1" >/dev/null 2>&1
 }
 
+is_wsl() {
+  if [[ -n "${WSL_DISTRO_NAME:-}" || -n "${WSL_INTEROP:-}" ]]; then
+    return 0
+  fi
+  if [[ -f /proc/version ]] && grep -qi microsoft /proc/version 2>/dev/null; then
+    return 0
+  fi
+  return 1
+}
+
 encode_file_base64() {
   python3 - "$1" <<'PY'
 import base64
@@ -69,33 +79,129 @@ install_ca_trust_store() {
         return 1
       fi
 
+      local linux_status=1
+
       if command_exists update-ca-certificates; then
         local dest="/usr/local/share/ca-certificates/ess-ca.crt"
         if sudo install -m 0644 "$CA_CERT_FILE" "$dest"; then
           if sudo update-ca-certificates; then
             echo "Installed CA via update-ca-certificates."
-            return 0
+            linux_status=0
           fi
         fi
-        echo "WARN: Failed to install CA using update-ca-certificates."
-        return 1
+        if (( linux_status != 0 )); then
+          echo "WARN: Failed to install CA using update-ca-certificates."
+        fi
       elif command_exists trust; then
         if sudo trust anchor --store "$CA_CERT_FILE"; then
           echo "Installed CA via trust anchor."
-          return 0
+          linux_status=0
+        else
+          echo "WARN: Failed to install CA using trust anchor."
         fi
-        echo "WARN: Failed to install CA using trust anchor."
-        return 1
       else
         echo "WARN: Neither update-ca-certificates nor trust present; skipping trust store install."
-        return 1
+        linux_status=1
       fi
+
+      local running_in_wsl=0
+      if is_wsl; then
+        running_in_wsl=1
+      fi
+
+      local windows_status=0
+      if (( running_in_wsl )); then
+        if install_ca_windows_trust_store; then
+          windows_status=0
+        else
+          windows_status=1
+        fi
+      fi
+
+      if (( linux_status == 0 )); then
+        if (( running_in_wsl == 0 )) || (( windows_status == 0 )); then
+          return 0
+        fi
+      fi
+
+      return 1
       ;;
     *)
       echo "WARN: Unsupported OS '$os_name'; skipping trust store install."
       return 1
       ;;
   esac
+}
+
+install_ca_windows_trust_store() {
+  if [[ ! -f "$CA_CERT_FILE" ]]; then
+    echo "WARN: CA certificate $CA_CERT_FILE missing; cannot install into Windows trust store."
+    return 1
+  fi
+
+  if ! command_exists wslpath; then
+    echo "WARN: wslpath not available; cannot convert path for Windows trust store install."
+    return 1
+  fi
+
+  local ps_exe=""
+  if command_exists powershell.exe; then
+    ps_exe="powershell.exe"
+  elif command_exists pwsh.exe; then
+    ps_exe="pwsh.exe"
+  else
+    echo "WARN: Neither powershell.exe nor pwsh.exe found; skipping Windows trust store install."
+    return 1
+  fi
+
+  local win_cert_path
+  if ! win_cert_path=$(wslpath -w "$CA_CERT_FILE"); then
+    echo "WARN: Unable to convert $CA_CERT_FILE to a Windows path."
+    return 1
+  fi
+
+  mkdir -p "$CA_DIR"
+  local ps_script
+  if ! ps_script=$(mktemp "${CA_DIR}/win-ca-import-XXXXXX.ps1"); then
+    echo "WARN: Unable to create temporary PowerShell script for Windows trust store install."
+    return 1
+  fi
+
+  cat >"$ps_script" <<'EOF'
+param(
+  [Parameter(Mandatory = $true)]
+  [string]$CertPath
+)
+
+try {
+  $null = Import-Certificate -FilePath $CertPath -CertStoreLocation 'Cert:\LocalMachine\Root' -ErrorAction Stop
+  Write-Host "Imported certificate into Windows trust store."
+  exit 0
+} catch {
+  Write-Error $_
+  exit 1
+}
+EOF
+
+  local win_script_path
+  if ! win_script_path=$(wslpath -w "$ps_script"); then
+    echo "WARN: Unable to convert temporary script path $ps_script to a Windows path."
+    rm -f "$ps_script"
+    return 1
+  fi
+
+  local ps_command="\$p = Start-Process PowerShell -ArgumentList '-NoProfile','-File','${win_script_path}','-CertPath','${win_cert_path}' -Verb RunAs -PassThru; \$p.WaitForExit(); exit \$p.ExitCode"
+
+  echo "Attempting Windows trust store install (requires elevation). Approve the Windows prompt if shown."
+  if "$ps_exe" -NoProfile -Command "$ps_command"; then
+    rm -f "$ps_script"
+    echo "Windows trust store install completed."
+    return 0
+  else
+    echo "WARN: Windows trust store install command failed."
+    rm -f "$ps_script"
+    return 1
+  fi
 }
 
 ensure_dependencies() {
