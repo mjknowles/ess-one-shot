@@ -8,6 +8,11 @@ CHART_REF="oci://ghcr.io/element-hq/ess-helm/matrix-stack"
 SKIP_CLUSTER_CREATION="false"
 FORCE_VALUES="false"
 EXTRA_HELM_ARGS=()
+CA_DIR="${PWD}/.ca"
+CA_CERT_FILE="${CA_DIR}/ca.crt"
+CA_KEY_FILE="${CA_DIR}/ca.pem"
+CA_FINGERPRINT_FILE="${CA_DIR}/ca.sha256"
+TRUST_CA="${ESS_TRUST_CA:-true}"
 
 usage() {
   cat <<'EOF'
@@ -35,6 +40,84 @@ fatal() {
 
 command_exists() {
   command -v "$1" >/dev/null 2>&1
+}
+
+encode_file_base64() {
+  python3 - "$1" <<'PY'
+import base64
+import sys
+
+with open(sys.argv[1], 'rb') as fh:
+    sys.stdout.write(base64.b64encode(fh.read()).decode())
+PY
+}
+
+install_ca_trust_store() {
+  if [[ "$TRUST_CA" != "true" ]]; then
+    echo "Skipping trust store install (ESS_TRUST_CA=$TRUST_CA)."
+    return 2
+  fi
+
+  if [[ ! -f "$CA_CERT_FILE" ]]; then
+    echo "WARN: CA certificate $CA_CERT_FILE missing; cannot install trust."
+    return 1
+  fi
+
+  local os_name
+  os_name="$(uname -s)"
+
+  case "$os_name" in
+    Darwin)
+      if ! command_exists security || ! command_exists sudo; then
+        echo "WARN: Unable to install CA automatically on macOS (requires security and sudo)."
+        return 1
+      fi
+
+      if ! sudo security delete-certificate -c "ess-ca" /Library/Keychains/System.keychain >/dev/null 2>&1; then
+        true
+      fi
+
+      if sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain "$CA_CERT_FILE"; then
+        echo "Installed CA into macOS trust store."
+        return 0
+      else
+        echo "WARN: Failed to install CA into macOS trust store."
+        return 1
+      fi
+      ;;
+    Linux)
+      if ! command_exists sudo; then
+        echo "WARN: sudo not available; cannot modify Linux trust store."
+        return 1
+      fi
+
+      if command_exists update-ca-certificates; then
+        local dest="/usr/local/share/ca-certificates/ess-ca.crt"
+        if sudo install -m 0644 "$CA_CERT_FILE" "$dest"; then
+          if sudo update-ca-certificates; then
+            echo "Installed CA via update-ca-certificates."
+            return 0
+          fi
+        fi
+        echo "WARN: Failed to install CA using update-ca-certificates."
+        return 1
+      elif command_exists trust; then
+        if sudo trust anchor --store "$CA_CERT_FILE"; then
+          echo "Installed CA via trust anchor."
+          return 0
+        fi
+        echo "WARN: Failed to install CA using trust anchor."
+        return 1
+      else
+        echo "WARN: Neither update-ca-certificates nor trust present; skipping trust store install."
+        return 1
+      fi
+      ;;
+    *)
+      echo "WARN: Unsupported OS '$os_name'; skipping trust store install."
+      return 1
+      ;;
+  esac
 }
 
 parse_args() {
@@ -80,7 +163,7 @@ parse_args() {
 }
 
 ensure_dependencies() {
-  for bin in kind kubectl helm; do
+  for bin in kind kubectl helm python3 openssl; do
     command_exists "$bin" || fatal "Missing dependency: $bin"
   done
 }
@@ -102,10 +185,10 @@ nodes:
 - role: control-plane
   extraPortMappings:
   - containerPort: 80
-    hostPort: 8080
+    hostPort: 80
     protocol: TCP
   - containerPort: 443
-    hostPort: 8443
+    hostPort: 443
     protocol: TCP
 EOF
   fi
@@ -143,21 +226,127 @@ ensure_cert_manager() {
     --wait \
     --set crds.enabled=true
 
+  mkdir -p "$CA_DIR"
+
+  if [[ ! -f "$CA_CERT_FILE" || ! -f "$CA_KEY_FILE" ]]; then
+    echo "Generating new local CA (stored in $CA_DIR)..."
+    cat <<'EOF' | kubectl apply -f -
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: ess-ca
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: ess-ca
+  namespace: cert-manager
+spec:
+  isCA: true
+  commonName: ess-ca
+  secretName: ess-ca
+  duration: 87660h0m0s
+  privateKey:
+    algorithm: RSA
+  issuerRef:
+    name: ess-ca
+    kind: ClusterIssuer
+    group: cert-manager.io
+EOF
+
+    kubectl wait \
+      --namespace cert-manager \
+      --for=condition=Ready \
+      certificate/ess-ca \
+      --timeout=180s
+
+    local tls_crt_b64
+    tls_crt_b64=$(kubectl -n cert-manager get secret ess-ca -o jsonpath="{.data['tls\.crt']}")
+    local tls_key_b64
+    tls_key_b64=$(kubectl -n cert-manager get secret ess-ca -o jsonpath="{.data['tls\.key']}")
+
+    python3 - "$tls_crt_b64" "$CA_CERT_FILE" <<'PY'
+import base64
+import sys
+
+data = sys.argv[1]
+path = sys.argv[2]
+with open(path, 'wb') as fh:
+    fh.write(base64.b64decode(data))
+PY
+
+    python3 - "$tls_key_b64" "$CA_KEY_FILE" <<'PY'
+import base64
+import sys
+
+data = sys.argv[1]
+path = sys.argv[2]
+with open(path, 'wb') as fh:
+    fh.write(base64.b64decode(data))
+PY
+
+    chmod 0644 "$CA_CERT_FILE"
+    chmod 0600 "$CA_KEY_FILE"
+  else
+    echo "Reusing existing local CA from $CA_DIR..."
+    kubectl delete ClusterIssuer ess-ca >/dev/null 2>&1 || true
+    kubectl -n cert-manager delete Certificate ess-ca >/dev/null 2>&1 || true
+    kubectl -n cert-manager delete Secret ess-ca >/dev/null 2>&1 || true
+
+    local tls_crt_b64
+    tls_crt_b64=$(encode_file_base64 "$CA_CERT_FILE")
+    local tls_key_b64
+    tls_key_b64=$(encode_file_base64 "$CA_KEY_FILE")
+
+    cat <<EOF | kubectl apply -f -
+apiVersion: v1
+kind: Secret
+metadata:
+  name: ess-ca
+  namespace: cert-manager
+type: kubernetes.io/tls
+data:
+  tls.crt: ${tls_crt_b64}
+  tls.key: ${tls_key_b64}
+  ca.crt: ${tls_crt_b64}
+EOF
+  fi
+
   cat <<'EOF' | kubectl apply -f -
 apiVersion: cert-manager.io/v1
 kind: ClusterIssuer
 metadata:
-  name: letsencrypt-prod
+  name: ess-selfsigned
 spec:
-  acme:
-    server: https://acme-v02.api.letsencrypt.org/directory
-    privateKeySecretRef:
-      name: letsencrypt-prod-private-key
-    solvers:
-      - http01:
-          ingress:
-            class: nginx
+  ca:
+    secretName: ess-ca
 EOF
+
+  if [[ -f "$CA_CERT_FILE" ]]; then
+    local fingerprint
+    fingerprint=$(openssl x509 -in "$CA_CERT_FILE" -noout -fingerprint -sha256 | awk -F= '{print $2}')
+    local previous_fingerprint=""
+    if [[ -f "$CA_FINGERPRINT_FILE" ]]; then
+      previous_fingerprint="$(<"$CA_FINGERPRINT_FILE")"
+    fi
+
+    if [[ "$fingerprint" != "$previous_fingerprint" ]]; then
+      if [[ "$TRUST_CA" == "true" ]]; then
+        echo "CA fingerprint changed; attempting trust store update..."
+        if install_ca_trust_store; then
+          printf '%s' "$fingerprint" > "$CA_FINGERPRINT_FILE"
+        else
+          echo "WARN: Automatic trust store update failed. Install ${CA_CERT_FILE} manually if needed."
+        fi
+      else
+        printf '%s' "$fingerprint" > "$CA_FINGERPRINT_FILE"
+        echo "CA fingerprint changed; skipping trust store update (ESS_TRUST_CA=false)."
+      fi
+    fi
+  fi
 }
 
 ensure_namespace() {
