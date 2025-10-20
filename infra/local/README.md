@@ -18,14 +18,10 @@ Spin up a local Kubernetes cluster and deploy the Element Server Suite (ESS) com
 127.0.0.1 rtc.ess.localhost
 ```
 
-Optional but nice:
-
-- infracost (https://www.infracost.io/docs/#quick-start)
-
 ### Quick start
 
 ```bash
-./infra/local/launch-local.sh
+./launch-local.sh
 kubectl exec -n ess -it deploy/ess-matrix-authentication-service -- mas-cli manage register-user
 ```
 
