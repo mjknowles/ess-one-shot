@@ -1,4 +1,5 @@
 matrixAuthenticationService:
+  enabled: false
   additional:
     0-customConfig:
       config: |
