@@ -1,0 +1,6 @@
+matrixAuthenticationService:
+  additional:
+    0-customConfig:
+      config: |
+        account:
+          password_registration_enabled: true
