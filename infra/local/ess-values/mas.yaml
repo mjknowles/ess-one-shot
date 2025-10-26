@@ -1,6 +1,14 @@
 matrixAuthenticationService:
+  enabled: true
   additional:
     0-customConfig:
       config: |
         account:
           password_registration_enabled: true
+        email:
+          from: '"Company Ink" <noreply@example.com>'
+          reply_to: '"Company Ink" <noreply@example.com>'
+          transport: smtp
+          mode: plain
+          hostname: "host.docker.internal"
+          port: 1025

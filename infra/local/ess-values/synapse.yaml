@@ -1,0 +1,6 @@
+synapse:
+  additional:
+    0-customConfig:
+      config: |
+        ip_range_whitelist:
+        - 127.0.0.0/8

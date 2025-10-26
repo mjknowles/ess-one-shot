@@ -10,6 +10,7 @@ CA_CERT_FILE="${CA_DIR}/ca.crt"
 CA_KEY_FILE="${CA_DIR}/ca.pem"
 CA_FINGERPRINT_FILE="${CA_DIR}/ca.sha256"
 TRUST_CA="${ESS_TRUST_CA:-true}"
+COMPOSE_FILE="${PWD}/docker-compose.yml"
 
 fatal() {
   echo "ERROR: $*" >&2
@@ -205,9 +206,27 @@ EOF
 }
 
 ensure_dependencies() {
-  for bin in kind kubectl helm python3 openssl; do
+  for bin in docker kind kubectl helm python3 openssl; do
     command_exists "$bin" || fatal "Missing dependency: $bin"
   done
+}
+
+ensure_mailpit() {
+  local compose_cmd=()
+  if docker compose version >/dev/null 2>&1; then
+    compose_cmd=(docker compose)
+  elif command_exists docker-compose; then
+    compose_cmd=(docker-compose)
+  else
+    fatal "Missing dependency: docker compose"
+  fi
+
+  if [[ ! -f "$COMPOSE_FILE" ]]; then
+    fatal "Missing compose file: $COMPOSE_FILE"
+  fi
+
+  echo "Ensuring Mailpit is running via docker compose..."
+  "${compose_cmd[@]}" -f "$COMPOSE_FILE" up -d mailpit >/dev/null
 }
 
 ensure_kind_cluster() {
@@ -420,6 +439,7 @@ install_ess_chart() {
 
 main() {
   ensure_dependencies
+  ensure_mailpit
   ensure_kind_cluster
   ensure_ingress_nginx
   ensure_cert_manager
