@@ -3,6 +3,8 @@ matrixAuthenticationService:
   additional:
     0-customConfig:
       config: |
+        http:
+          public_base: "http://matrix-authentication-service.default.svc.cluster.local/"
         account:
           password_registration_enabled: true
         email:
