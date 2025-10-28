@@ -29,6 +29,7 @@ kubectl exec -n ess -it deploy/ess-matrix-authentication-service -- mas-cli mana
 
 ```bash
 kind delete cluster --name ess-one-shot
+docker rm -f kind-registry
 docker compose down -v
 ./remove-ca-trust.sh
 ```

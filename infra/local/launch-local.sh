@@ -11,6 +11,8 @@ CA_KEY_FILE="${CA_DIR}/ca.pem"
 CA_FINGERPRINT_FILE="${CA_DIR}/ca.sha256"
 TRUST_CA="${ESS_TRUST_CA:-true}"
 COMPOSE_FILE="${PWD}/docker-compose.yml"
+KIND_REGISTRY_NAME="${ESS_KIND_REGISTRY_NAME:-kind-registry}"
+KIND_REGISTRY_PORT="${ESS_KIND_REGISTRY_PORT:-5001}"
 
 fatal() {
   echo "ERROR: $*" >&2
@@ -229,6 +231,33 @@ ensure_mailpit() {
   "${compose_cmd[@]}" -f "$COMPOSE_FILE" up -d mailpit >/dev/null
 }
 
+ensure_local_registry() {
+  local reg_name="$KIND_REGISTRY_NAME"
+  local reg_port="$KIND_REGISTRY_PORT"
+
+  local running_state
+  running_state=$(docker inspect -f '{{.State.Running}}' "$reg_name" 2>/dev/null || true)
+
+  case "$running_state" in
+    true)
+      echo "Reusing existing local registry '$reg_name'."
+      ;;
+    false)
+      echo "Starting existing local registry '$reg_name'..."
+      docker start "$reg_name" >/dev/null
+      ;;
+    *)
+      echo "Creating local registry '$reg_name'..."
+      docker run \
+        -d --restart=always \
+        -p "127.0.0.1:${reg_port}:5000" \
+        --network bridge \
+        --name "$reg_name" \
+        registry:2 >/dev/null
+      ;;
+  esac
+}
+
 ensure_kind_cluster() {
   if kind get clusters | grep -Fxq "$CLUSTER_NAME"; then
     echo "Reusing existing kind cluster '$CLUSTER_NAME'."
@@ -237,6 +266,10 @@ ensure_kind_cluster() {
     cat <<EOF | kind create cluster --name "$CLUSTER_NAME" --config=-
 kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
+containerdConfigPatches:
+- |-
+  [plugins."io.containerd.grpc.v1.cri".registry]
+    config_path = "/etc/containerd/certs.d"
 nodes:
 - role: control-plane
   extraPortMappings:
@@ -250,6 +283,47 @@ EOF
   fi
 
   kubectl config use-context "kind-${CLUSTER_NAME}" >/dev/null
+}
+
+configure_kind_registry() {
+  local reg_name="$KIND_REGISTRY_NAME"
+  local reg_port="$KIND_REGISTRY_PORT"
+  local registry_dir="/etc/containerd/certs.d/localhost:${reg_port}"
+
+  local nodes
+  if ! nodes=$(kind get nodes --name "$CLUSTER_NAME" 2>/dev/null); then
+    nodes=$(kind get nodes 2>/dev/null | grep -E "^${CLUSTER_NAME}-" || true)
+  fi
+
+  if [[ -z "${nodes:-}" ]]; then
+    echo "WARN: No kind nodes found for cluster '$CLUSTER_NAME'; skipping registry configuration."
+    return
+  fi
+
+  for node in $nodes; do
+    docker exec "$node" mkdir -p "$registry_dir"
+    cat <<EOF | docker exec -i "$node" cp /dev/stdin "$registry_dir/hosts.toml"
+[host."http://${reg_name}:5000"]
+EOF
+  done
+
+  local network_state
+  network_state=$(docker inspect -f='{{json .NetworkSettings.Networks.kind}}' "$reg_name" 2>/dev/null || echo null)
+  if [[ "$network_state" == "null" ]]; then
+    docker network connect "kind" "$reg_name" >/dev/null 2>&1 || true
+  fi
+
+  cat <<EOF | kubectl apply -f -
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: local-registry-hosting
+  namespace: kube-public
+data:
+  localRegistryHosting.v1: |
+    host: "localhost:${reg_port}"
+    help: "https://kind.sigs.k8s.io/docs/user/local-registry/"
+EOF
 }
 
 ensure_ingress_nginx() {
@@ -440,7 +514,9 @@ install_ess_chart() {
 main() {
   ensure_dependencies
   ensure_mailpit
+  ensure_local_registry
   ensure_kind_cluster
+  configure_kind_registry
   ensure_ingress_nginx
   ensure_cert_manager
   ensure_namespace
