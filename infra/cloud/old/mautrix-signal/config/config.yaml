@@ -161,7 +161,7 @@ database:
   #           https://github.com/mattn/go-sqlite3#connection-string
   #   Postgres: Connection string. For example, postgres://user:password@host/database?sslmode=disable
   #             To connect via Unix socket, use something like postgres:///dbname?host=/var/run/postgresql
-  uri: postgres://mautrix_signal_app:%3Fs0%40lfT_Dky%403VNVEBA_tyhy@10.31.0.3/mautrix_signal?sslmode=disable
+  uri: postgres://mautrix_signal_app:MzLaM9GZ%2BJMV2CdIDvS%40pOGB@10.49.144.3/mautrix_signal?sslmode=disable
   # Maximum number of connections.
   max_open_conns: 5
   max_idle_conns: 1

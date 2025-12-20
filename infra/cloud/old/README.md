@@ -24,21 +24,35 @@ dns_zone_name  = "mjknowles-dev-zone"
 
 ## 2. Initialize remote state
 
-```bash
-./init-remote-state.sh \
-  --project ess-one-shot \
-  --bucket ess-one-shot-tfstate \
-  --location us
+One bucket, two prefixes—one per stack. Run these once to write backend files:
 
-tofu init -backend-config=backend.hcl
-```
+- Base backend (`infra/cloud/base/backend.hcl`, prefix `opentofu/base`):
 
-Run with your project, bucket, and region; add `--state-admin you@example.com` if someone else needs access to the bucket.
+  ```bash
+  ./init-remote-state.sh \
+    --project ess-one-shot \
+    --bucket ess-one-shot-tfstate \
+    --location us \
+    --backend-file infra/cloud/base/backend.hcl
+  ```
+
+- Gateway backend (`infra/cloud/gateway/backend.hcl`, prefix `opentofu/gateway`):
+  ```bash
+  ./init-remote-state.sh \
+    --project ess-one-shot \
+    --bucket ess-one-shot-tfstate \
+    --location us \
+    --prefix opentofu/gateway \
+    --backend-file infra/cloud/gateway/backend.hcl
+  ```
+
+Use your project, bucket, and region; add `--state-admin you@example.com` if someone else needs bucket access. Never share a prefix between stacks.
 
 ## 3. Apply the infrastructure
 
 ```bash
-# from base dir
+cd base
+tofu init -backend-config=backend.hcl
 tofu apply -var-file=../terraform.tfvars -auto-approve
 
 ```
@@ -66,7 +80,8 @@ The Synapse release automatically references the generated ConfigMap (`registrat
 Deploy gateway:
 
 ```bash
-  # from gateway dir
+  cd gateway
+  tofu init -reconfigure -backend-config=backend.hcl
   tofu apply -var-file=../terraform.tfvars -auto-approve
 ```
 

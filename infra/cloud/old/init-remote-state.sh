@@ -5,7 +5,7 @@ PROJECT_ID=""
 BUCKET_NAME=""
 LOCATION=""
 STATE_PREFIX="opentofu/base"
-BACKEND_FILE="$(dirname "${BASH_SOURCE[0]}")/backend.hcl"
+BACKEND_FILE="$(dirname "${BASH_SOURCE[0]}")/base/backend.hcl"
 STATE_ADMIN=""
 FORCE_BACKEND="false"
 
@@ -21,7 +21,7 @@ Options:
   --bucket BUCKET         Name of the GCS bucket to use for state (required)
   --location LOCATION     Bucket location, e.g. us, us-central1 (required for creation)
   --prefix PREFIX         Object prefix inside the bucket (default: opentofu/base)
-  --backend-file PATH     Where to write backend.hcl (default: infra/cloud/backend.hcl)
+  --backend-file PATH     Where to write backend.hcl (default: infra/cloud/base/backend.hcl)
   --state-admin PRINCIPAL Grant roles/storage.objectAdmin on the bucket to this principal
                           (service account email or user, e.g. user:you@example.com)
   --force                 Overwrite backend file if it already exists
