@@ -101,8 +101,8 @@ MAUTRIX_SIGNAL_DB_NAME=$(tf_output_string "mautrix_signal_database_name.value")
 MAUTRIX_SIGNAL_NAMESPACE=${MAUTRIX_SIGNAL_NAMESPACE:-ess}
 MAUTRIX_SIGNAL_RELEASE_NAME=${MAUTRIX_SIGNAL_RELEASE_NAME:-mautrix-signal}
 MAUTRIX_SIGNAL_REPLICA_COUNT=${MAUTRIX_SIGNAL_REPLICA_COUNT:-1}
-MAUTRIX_SIGNAL_CONFIG_PATH=${MAUTRIX_SIGNAL_CONFIG_PATH:-${SCRIPT_DIR}/mautrix-signal/config/config.yaml}
-MAUTRIX_SIGNAL_REGISTRATION_PATH=${MAUTRIX_SIGNAL_REGISTRATION_PATH:-${SCRIPT_DIR}/mautrix-signal/config/registration.yaml}
+MAUTRIX_SIGNAL_CONFIG_PATH=${MAUTRIX_SIGNAL_CONFIG_PATH:-${SCRIPT_DIR}/../mautrix-signal/config/config.yaml}
+MAUTRIX_SIGNAL_REGISTRATION_PATH=${MAUTRIX_SIGNAL_REGISTRATION_PATH:-${SCRIPT_DIR}/../mautrix-signal/config/registration.yaml}
 MAUTRIX_SIGNAL_IMAGE_REPOSITORY=${MAUTRIX_SIGNAL_IMAGE_REPOSITORY:-dock.mau.dev/mautrix/signal}
 MAUTRIX_SIGNAL_IMAGE_TAG=${MAUTRIX_SIGNAL_IMAGE_TAG:-v0.8.6}
 MAUTRIX_SIGNAL_IMAGE_PULL_POLICY=${MAUTRIX_SIGNAL_IMAGE_PULL_POLICY:-IfNotPresent}
@@ -307,7 +307,7 @@ helm upgrade --install ess oci://ghcr.io/element-hq/ess-helm/matrix-stack \
   --timeout "${HELM_TIMEOUT}" \
   -f "${ESS_VALUES}"
 
-helm upgrade --install "${MAUTRIX_SIGNAL_RELEASE_NAME}" "${SCRIPT_DIR}/mautrix-signal" \
+helm upgrade --install "${MAUTRIX_SIGNAL_RELEASE_NAME}" "${SCRIPT_DIR}/../mautrix-signal" \
   --namespace "${MAUTRIX_SIGNAL_NAMESPACE}" \
   --create-namespace \
   --wait \
