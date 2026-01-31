@@ -14,7 +14,7 @@ Usage:
   deploy-charts.sh [--tf-dir PATH] [--skip-repo-update]
 
 Options:
-  --tf-dir PATH         Directory that contains the OpenTofu configuration (default: infra/cloud)
+  --tf-dir PATH         Directory that contains the OpenTofu configuration (default: infra/cloud/gcp)
   --skip-repo-update    Skip running `helm repo update`
   -h, --help            Show this help message
 EOF
