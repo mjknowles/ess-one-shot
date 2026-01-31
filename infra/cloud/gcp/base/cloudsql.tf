@@ -16,12 +16,6 @@ resource "random_password" "mautrix_signal_db_user" {
   override_special = "!@#%^*_-+=?"
 }
 
-resource "random_password" "replication_user" {
-  length           = 24
-  special          = true
-  override_special = "!@#%^*_-+=?"
-}
-
 resource "google_sql_database_instance" "ess" {
   name             = local.cloudsql_instance_name
   project          = var.project_id
@@ -51,21 +45,6 @@ resource "google_sql_database_instance" "ess" {
       day          = 7
       hour         = 3
       update_track = "stable"
-    }
-
-    database_flags {
-      name  = "cloudsql.logical_decoding"
-      value = "on"
-    }
-
-    database_flags {
-      name  = "max_replication_slots"
-      value = "10"
-    }
-
-    database_flags {
-      name  = "max_wal_senders"
-      value = "10"
     }
 
   }
@@ -131,11 +110,4 @@ resource "google_sql_user" "mautrix_signal" {
   instance = google_sql_database_instance.ess.name
   project  = var.project_id
   password = random_password.mautrix_signal_db_user.result
-}
-
-resource "google_sql_user" "replication" {
-  name     = local.replication_user_name
-  instance = google_sql_database_instance.ess.name
-  project  = var.project_id
-  password = random_password.replication_user.result
 }

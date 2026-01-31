@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+
 CLUSTER_NAME="ess-one-shot"
 NAMESPACE="ess"
 VALUES_DIR="${PWD}/ess-values"
@@ -13,6 +15,17 @@ TRUST_CA="${ESS_TRUST_CA:-true}"
 COMPOSE_FILE="${PWD}/docker-compose.yml"
 KIND_REGISTRY_NAME="${ESS_KIND_REGISTRY_NAME:-kind-registry}"
 KIND_REGISTRY_PORT="${ESS_KIND_REGISTRY_PORT:-5001}"
+
+MAUTRIX_SIGNAL_NAMESPACE="${MAUTRIX_SIGNAL_NAMESPACE:-${NAMESPACE}}"
+MAUTRIX_SIGNAL_RELEASE_NAME="${MAUTRIX_SIGNAL_RELEASE_NAME:-mautrix-signal}"
+MAUTRIX_SIGNAL_REPLICA_COUNT="${MAUTRIX_SIGNAL_REPLICA_COUNT:-1}"
+MAUTRIX_SIGNAL_CONFIG_PATH="${MAUTRIX_SIGNAL_CONFIG_PATH:-${SCRIPT_DIR}/../mautrix-signal/config/config.yaml}"
+MAUTRIX_SIGNAL_REGISTRATION_PATH="${MAUTRIX_SIGNAL_REGISTRATION_PATH:-${SCRIPT_DIR}/../mautrix-signal/config/registration.yaml}"
+MAUTRIX_SIGNAL_IMAGE_REPOSITORY="${MAUTRIX_SIGNAL_IMAGE_REPOSITORY:-dock.mau.dev/mautrix/signal}"
+MAUTRIX_SIGNAL_IMAGE_TAG="${MAUTRIX_SIGNAL_IMAGE_TAG:-v0.8.6}"
+MAUTRIX_SIGNAL_IMAGE_PULL_POLICY="${MAUTRIX_SIGNAL_IMAGE_PULL_POLICY:-IfNotPresent}"
+MAUTRIX_SIGNAL_SERVICE_PORT="${MAUTRIX_SIGNAL_SERVICE_PORT:-29328}"
+MAUTRIX_SIGNAL_CHART_DIR="${MAUTRIX_SIGNAL_CHART_DIR:-${SCRIPT_DIR}/../mautrix-signal}"
 
 fatal() {
   echo "ERROR: $*" >&2
@@ -487,6 +500,84 @@ ensure_namespace() {
   kubectl create namespace "$NAMESPACE"
 }
 
+ensure_mautrix_signal_namespace() {
+  if kubectl get ns "$MAUTRIX_SIGNAL_NAMESPACE" >/dev/null 2>&1; then
+    return
+  fi
+
+  kubectl create namespace "$MAUTRIX_SIGNAL_NAMESPACE"
+}
+
+prepare_mautrix_signal() {
+  if [[ ! -d "${MAUTRIX_SIGNAL_CHART_DIR}" ]]; then
+    fatal "Missing mautrix-signal chart directory: ${MAUTRIX_SIGNAL_CHART_DIR}"
+  fi
+
+  if [[ ! -f "${MAUTRIX_SIGNAL_CONFIG_PATH}" ]]; then
+    fatal "Missing mautrix-signal config file: ${MAUTRIX_SIGNAL_CONFIG_PATH}"
+  fi
+
+  if [[ ! -f "${MAUTRIX_SIGNAL_REGISTRATION_PATH}" ]]; then
+    fatal "Missing mautrix-signal registration file: ${MAUTRIX_SIGNAL_REGISTRATION_PATH}"
+  fi
+
+  MAUTRIX_SIGNAL_CONFIG_CONTENT=$(awk '{print "    "$0} END {print ""}' "${MAUTRIX_SIGNAL_CONFIG_PATH}")
+  MAUTRIX_SIGNAL_REGISTRATION_CONTENT=$(awk '{print "    "$0} END {print ""}' "${MAUTRIX_SIGNAL_REGISTRATION_PATH}")
+
+  MAUTRIX_SIGNAL_CHART_NAME="mautrix-signal"
+  if [[ "${MAUTRIX_SIGNAL_RELEASE_NAME}" == *"${MAUTRIX_SIGNAL_CHART_NAME}"* ]]; then
+    MAUTRIX_SIGNAL_CONFIGMAP_NAME="${MAUTRIX_SIGNAL_RELEASE_NAME}"
+  else
+    MAUTRIX_SIGNAL_CONFIGMAP_NAME="${MAUTRIX_SIGNAL_RELEASE_NAME}-${MAUTRIX_SIGNAL_CHART_NAME}"
+  fi
+  MAUTRIX_SIGNAL_CONFIGMAP_NAME="${MAUTRIX_SIGNAL_CONFIGMAP_NAME:0:63}"
+  MAUTRIX_SIGNAL_CONFIGMAP_NAME="${MAUTRIX_SIGNAL_CONFIGMAP_NAME%-}"
+  MAUTRIX_SIGNAL_CONFIGMAP_RESOURCE="${MAUTRIX_SIGNAL_CONFIGMAP_NAME}-config"
+  MAUTRIX_SIGNAL_CONFIGMAP_RESOURCE="${MAUTRIX_SIGNAL_CONFIGMAP_RESOURCE:0:63}"
+  MAUTRIX_SIGNAL_CONFIGMAP_RESOURCE="${MAUTRIX_SIGNAL_CONFIGMAP_RESOURCE%-}"
+
+  MAUTRIX_SIGNAL_CONFIGMAP_MANIFEST="${TMP_DIR}/mautrix-signal-configmap.yaml"
+  cat > "${MAUTRIX_SIGNAL_CONFIGMAP_MANIFEST}" <<EOF
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ${MAUTRIX_SIGNAL_CONFIGMAP_RESOURCE}
+  namespace: ${MAUTRIX_SIGNAL_NAMESPACE}
+data:
+  config.yaml: |
+${MAUTRIX_SIGNAL_CONFIG_CONTENT}
+  registration.yaml: |
+${MAUTRIX_SIGNAL_REGISTRATION_CONTENT}
+EOF
+
+  MAUTRIX_SIGNAL_ESS_VALUES="${TMP_DIR}/mautrix-signal-ess-values.yaml"
+  cat > "${MAUTRIX_SIGNAL_ESS_VALUES}" <<EOF
+synapse:
+  appservices:
+    - configMap: "${MAUTRIX_SIGNAL_CONFIGMAP_RESOURCE}"
+      configMapKey: registration.yaml
+EOF
+
+  MAUTRIX_SIGNAL_VALUES="${TMP_DIR}/mautrix-signal-values.yaml"
+  cat > "${MAUTRIX_SIGNAL_VALUES}" <<EOF
+replicaCount: ${MAUTRIX_SIGNAL_REPLICA_COUNT}
+image:
+  repository: ${MAUTRIX_SIGNAL_IMAGE_REPOSITORY}
+  tag: ${MAUTRIX_SIGNAL_IMAGE_TAG}
+  pullPolicy: ${MAUTRIX_SIGNAL_IMAGE_PULL_POLICY}
+service:
+  type: ClusterIP
+  port: ${MAUTRIX_SIGNAL_SERVICE_PORT}
+configMap:
+  create: false
+  name: ${MAUTRIX_SIGNAL_CONFIGMAP_RESOURCE}
+resources:
+  requests:
+    cpu: 25m
+    memory: 64Mi
+EOF
+}
+
 install_ess_chart() {
   echo "Deploying ESS chart into namespace '$NAMESPACE'..."
   local helm_cmd=(
@@ -505,13 +596,28 @@ install_ess_chart() {
       helm_cmd+=(-f "$file")
     done < <(find "$VALUES_DIR" -maxdepth 1 -type f \( -name '*.yml' -o -name '*.yaml' \) | LC_ALL=C sort)
   fi
+  if [[ -n "${MAUTRIX_SIGNAL_ESS_VALUES:-}" && -f "${MAUTRIX_SIGNAL_ESS_VALUES}" ]]; then
+    helm_cmd+=(-f "${MAUTRIX_SIGNAL_ESS_VALUES}")
+  fi
 
   "${helm_cmd[@]}"
 
   echo "ESS chart installation command completed."
 }
 
+install_mautrix_signal_chart() {
+  echo "Deploying mautrix-signal chart into namespace '${MAUTRIX_SIGNAL_NAMESPACE}'..."
+  helm upgrade --install "${MAUTRIX_SIGNAL_RELEASE_NAME}" "${MAUTRIX_SIGNAL_CHART_DIR}" \
+    --namespace "${MAUTRIX_SIGNAL_NAMESPACE}" \
+    --create-namespace \
+    --wait \
+    -f "${MAUTRIX_SIGNAL_VALUES}"
+}
+
 main() {
+  TMP_DIR=$(mktemp -d)
+  trap 'rm -rf "${TMP_DIR}"' EXIT
+
   ensure_dependencies
   ensure_mailpit
   ensure_local_registry
@@ -520,7 +626,11 @@ main() {
   ensure_ingress_nginx
   ensure_cert_manager
   ensure_namespace
+  ensure_mautrix_signal_namespace
+  prepare_mautrix_signal
+  kubectl apply -f "${MAUTRIX_SIGNAL_CONFIGMAP_MANIFEST}"
   install_ess_chart
+  install_mautrix_signal_chart
 
   cat <<EOF
 

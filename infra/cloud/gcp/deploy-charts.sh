@@ -14,7 +14,7 @@ Usage:
   deploy-charts.sh [--tf-dir PATH] [--skip-repo-update]
 
 Options:
-  --tf-dir PATH         Directory that contains the OpenTofu configuration (default: infra/cloud)
+  --tf-dir PATH         Directory that contains the OpenTofu configuration (default: infra/cloud/gcp)
   --skip-repo-update    Skip running `helm repo update`
   -h, --help            Show this help message
 EOF
@@ -101,8 +101,8 @@ MAUTRIX_SIGNAL_DB_NAME=$(tf_output_string "mautrix_signal_database_name.value")
 MAUTRIX_SIGNAL_NAMESPACE=${MAUTRIX_SIGNAL_NAMESPACE:-ess}
 MAUTRIX_SIGNAL_RELEASE_NAME=${MAUTRIX_SIGNAL_RELEASE_NAME:-mautrix-signal}
 MAUTRIX_SIGNAL_REPLICA_COUNT=${MAUTRIX_SIGNAL_REPLICA_COUNT:-1}
-MAUTRIX_SIGNAL_CONFIG_PATH=${MAUTRIX_SIGNAL_CONFIG_PATH:-${SCRIPT_DIR}/mautrix-signal/config/config.yaml}
-MAUTRIX_SIGNAL_REGISTRATION_PATH=${MAUTRIX_SIGNAL_REGISTRATION_PATH:-${SCRIPT_DIR}/mautrix-signal/config/registration.yaml}
+MAUTRIX_SIGNAL_CONFIG_PATH=${MAUTRIX_SIGNAL_CONFIG_PATH:-${SCRIPT_DIR}/mautrix-signal/config.cloud.yaml}
+MAUTRIX_SIGNAL_REGISTRATION_PATH=${MAUTRIX_SIGNAL_REGISTRATION_PATH:-${SCRIPT_DIR}/../mautrix-signal/config/registration.yaml}
 MAUTRIX_SIGNAL_IMAGE_REPOSITORY=${MAUTRIX_SIGNAL_IMAGE_REPOSITORY:-dock.mau.dev/mautrix/signal}
 MAUTRIX_SIGNAL_IMAGE_TAG=${MAUTRIX_SIGNAL_IMAGE_TAG:-v0.8.6}
 MAUTRIX_SIGNAL_IMAGE_PULL_POLICY=${MAUTRIX_SIGNAL_IMAGE_PULL_POLICY:-IfNotPresent}
@@ -134,7 +134,13 @@ print(f"postgres://{quote_plus(user)}:{quote_plus(password)}@{host}/{quote_plus(
 PY
 )
 
-python3 - "${MAUTRIX_SIGNAL_CONFIG_PATH}" "${MAUTRIX_SIGNAL_DB_URI}" <<'PY'
+TMP_DIR=$(mktemp -d)
+trap 'rm -rf "${TMP_DIR}"' EXIT
+
+CONFIG_WORK_PATH="${TMP_DIR}/mautrix-signal-config.yaml"
+cp "${MAUTRIX_SIGNAL_CONFIG_PATH}" "${CONFIG_WORK_PATH}"
+
+python3 - "${CONFIG_WORK_PATH}" "${MAUTRIX_SIGNAL_DB_URI}" <<'PY'
 import re
 import sys
 from pathlib import Path
@@ -151,7 +157,7 @@ if text.endswith("\n") and not new_text.endswith("\n"):
 path.write_text(new_text)
 PY
 
-MAUTRIX_SIGNAL_CONFIG_CONTENT=$(awk '{print "    "$0} END {print ""}' "${MAUTRIX_SIGNAL_CONFIG_PATH}")
+MAUTRIX_SIGNAL_CONFIG_CONTENT=$(awk '{print "    "$0} END {print ""}' "${CONFIG_WORK_PATH}")
 MAUTRIX_SIGNAL_REGISTRATION_CONTENT=$(awk '{print "    "$0} END {print ""}' "${MAUTRIX_SIGNAL_REGISTRATION_PATH}")
 
 MAUTRIX_SIGNAL_CHART_NAME="mautrix-signal"
@@ -165,9 +171,6 @@ MAUTRIX_SIGNAL_CONFIGMAP_NAME="${MAUTRIX_SIGNAL_CONFIGMAP_NAME%-}"
 MAUTRIX_SIGNAL_CONFIGMAP_RESOURCE="${MAUTRIX_SIGNAL_CONFIGMAP_NAME}-config"
 MAUTRIX_SIGNAL_CONFIGMAP_RESOURCE="${MAUTRIX_SIGNAL_CONFIGMAP_RESOURCE:0:63}"
 MAUTRIX_SIGNAL_CONFIGMAP_RESOURCE="${MAUTRIX_SIGNAL_CONFIGMAP_RESOURCE%-}"
-
-TMP_DIR=$(mktemp -d)
-trap 'rm -rf "${TMP_DIR}"' EXIT
 
 MAUTRIX_SIGNAL_CONFIGMAP_MANIFEST="${TMP_DIR}/mautrix-signal-configmap.yaml"
 cat > "${MAUTRIX_SIGNAL_CONFIGMAP_MANIFEST}" <<EOF
@@ -307,7 +310,7 @@ helm upgrade --install ess oci://ghcr.io/element-hq/ess-helm/matrix-stack \
   --timeout "${HELM_TIMEOUT}" \
   -f "${ESS_VALUES}"
 
-helm upgrade --install "${MAUTRIX_SIGNAL_RELEASE_NAME}" "${SCRIPT_DIR}/mautrix-signal" \
+helm upgrade --install "${MAUTRIX_SIGNAL_RELEASE_NAME}" "${SCRIPT_DIR}/../mautrix-signal" \
   --namespace "${MAUTRIX_SIGNAL_NAMESPACE}" \
   --create-namespace \
   --wait \

@@ -127,44 +127,6 @@ output "mautrix_signal_database_name" {
   value       = local.mautrix_signal_db_name
 }
 
-output "bigquery_dataset_id" {
-  description = "Dataset that receives Datastream change data capture output."
-  value       = google_bigquery_dataset.cdc.id
-}
-
-output "analytics_location" {
-  description = "Region where the CDC (Datastream/BigQuery) resources reside."
-  value       = local.analytics_location
-}
-
-output "datastream_stream_ids" {
-  description = "Identifiers for the Datastream streams created for CDC."
-  value = {
-    synapse = google_datastream_stream.synapse.stream_id
-    mas     = google_datastream_stream.matrix_auth.stream_id
-  }
-}
-
-output "datastream_private_connection" {
-  description = "Fully qualified name of the Datastream private connection used for CDC."
-  value       = google_datastream_private_connection.cloudsql.name
-}
-
-output "datastream_publication_prefix" {
-  description = "Prefix used for Datastream publications in Cloud SQL."
-  value       = local.datastream_publication
-}
-
-output "datastream_replication_slot_prefix" {
-  description = "Prefix used for Datastream replication slots in Cloud SQL."
-  value       = local.datastream_replication_slot
-}
-
-output "datastream_replication_user" {
-  description = "Replication user created for Datastream CDC."
-  value       = local.replication_user_name
-}
-
 output "project_id" {
   description = "GCP project where this stack is deployed."
   value       = var.project_id
