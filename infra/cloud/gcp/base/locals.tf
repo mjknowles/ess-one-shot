@@ -20,10 +20,6 @@ locals {
   matrix_auth_db_user            = "mas_app"
   mautrix_signal_db_name         = "mautrix_signal"
   mautrix_signal_db_user         = "mautrix_signal_app"
-  analytics_dataset_id           = "ess_matrix_cdc"
-  analytics_location             = "us-central1"
-  datastream_stream_base         = "ess-postgres-to-bq"
-  datastream_psc_subnetwork_cidr = "10.40.0.0/29"
 }
 
 locals {
@@ -42,15 +38,11 @@ locals {
   dns_project                         = trimspace(var.dns_project_id) != "" ? trimspace(var.dns_project_id) : var.project_id
   sanitized_instance_name             = join("-", regexall("[a-z0-9]+", lower(local.cloudsql_instance_name)))
   cloudsql_private_range_name         = substr("${local.sanitized_instance_name}-ps-range", 0, 62)
-  datastream_private_connection_id    = substr("${local.sanitized_instance_name}-psc", 0, 63)
   synapse_service_account_name        = "synapse-db-client"
   mas_service_account_name            = "mas-db-client"
   synapse_secret_name                 = "synapse-db-credentials"
   mas_secret_name                     = "mas-db-credentials"
   mautrix_signal_secret_name          = "mautrix-signal-db-credentials"
-  replication_user_name               = "datastream_replica"
-  datastream_publication              = "ess_publication"
-  datastream_replication_slot         = "ess_replication_slot"
   certificate_name                    = "ess-gateway-certificate"
   certificate_map_name                = "ess-gateway-cert-map"
   certificate_map_entry_base_name     = "ess-base-certificate-entry"
@@ -61,7 +53,6 @@ locals {
     local.base_domain,
     "*.${local.base_domain}"
   ])
-  datastream_service_agent_email = "service-${data.google_project.current.number}@gcp-sa-datastream.iam.gserviceaccount.com"
 }
 
 locals {

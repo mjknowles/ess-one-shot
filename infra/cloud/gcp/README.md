@@ -1,13 +1,13 @@
 # GCP Quickstart
 
-Follow these steps to bring the Element Server Suite online on GKE Autopilot with Cloud SQL and Datastream.
+Follow these steps to bring the Element Server Suite online on GKE Autopilot with Cloud SQL.
 
 ## Prerequisites
 
 - [OpenTofu 1.6+](https://opentofu.org/)
 - [Google Cloud CLI](https://cloud.google.com/sdk/docs/install) with `gcloud auth application-default login` (or a service-account key exported in `GOOGLE_APPLICATION_CREDENTIALS`)
 - [Helm 3.8+](https://helm.sh/)
-- IAM access to create/modify GKE, Cloud SQL, Datastream, BigQuery, DNS, and Secret Manager resources in the target project
+- IAM access to create/modify GKE, Cloud SQL, DNS, and Secret Manager resources in the target project
 - A Cloud DNS managed zone that already serves the domain or subdomain you plan to dedicate to ESS
 - `helm repo add element-hq https://element-hq.github.io/helm-charts`
 
@@ -85,16 +85,6 @@ Deploy gateway:
   tofu apply -var-file=../terraform.tfvars -auto-approve
 ```
 
-- Run the helper to grant Datastream access on Cloud SQL and start the streams:
-
-  ```bash
-  ./post-apply.sh
-  ```
-
-  Pass `--project` or `--tf-dir` if you applied from a different project or directory.
-
-- Confirm BigQuery tables are receiving data from Datastream when the streams report `state: RUNNING`.
-
 ## 6. Tear down (when you are done)
 
 - Optional: clean up the Helm releases before destroying infra.
@@ -130,7 +120,7 @@ Deploy gateway:
     --type="CNAME"
   ```
 
-Remove any leftover Cloud SQL data or BigQuery tables manually if you no longer need them.
+Remove any leftover Cloud SQL data manually if you no longer need it.
 
 ### If you delete Cloud SQL manually
 
@@ -138,7 +128,6 @@ If you remove the Cloud SQL instance or databases outside of OpenTofu, prune the
 
 ```bash
 tofu state rm google_sql_database_instance.ess
-tofu state rm google_sql_user.replication
 ```
 
 Adjust the list if you only removed a subset (for example, omit the instance line if you deleted just the databases). After the state is updated, rerun `tofu destroy` for the base stack so the remaining resources are cleaned up.
