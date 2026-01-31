@@ -23,12 +23,30 @@ Open a terminal or command prompt and log in:
 ```bash
 gcloud auth login
 gcloud projects list
-gcloud config set project PROJECT_ID
+gcloud config set project dns-infra-474704
 gcloud services enable domains.googleapis.com
-gcloud domains registrations search-domains KEYWORD
-gcloud domains registrations get-register-parameters YOURSITE.com
-gcloud dns managed-zones create YOURSITE-zone \
-  --description="DNS zone for YOURSITE.com" \
-  --dns-name="YOURSITE.com."
-  gcloud domains registrations register YOURSITE.com
+gcloud domains registrations search-domains mjknowles
+gcloud domains registrations get-register-parameters mjknowles.dev
+gcloud dns managed-zones create mjknowles-dev-zone \
+  --description="DNS zone for mjknowles.dev" \
+  --dns-name="mjknowles.dev."
+gcloud domains registrations register mjknowles.dev
 ```
+
+## 🧹 Step 2. Tear down (optional)
+
+When you no longer need the DNS zone (for example, to stop Cloud DNS billing), delete it from the DNS project:
+
+```bash
+gcloud dns managed-zones delete mjknowles-dev-zone \
+  --project dns-infra-474704
+```
+
+If you also want to relinquish the domain itself, cancel the registration and let it expire:
+
+```bash
+gcloud domains registrations delete mjknowles.dev \
+  --project dns-infra-474704
+```
+
+Keep in mind that deleting the zone removes all DNS records, so any services pointing at `mjknowles.dev` will stop resolving immediately.
