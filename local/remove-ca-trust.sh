@@ -3,8 +3,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-CA_DIR="${REPO_ROOT}/.ca"
+CA_DIR="${SCRIPT_DIR}/.ca"
 CA_CERT_FILE="${CA_DIR}/ca.crt"
 CA_FINGERPRINT_FILE="${CA_DIR}/ca.sha256"
 

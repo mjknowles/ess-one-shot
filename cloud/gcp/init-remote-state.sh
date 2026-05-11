@@ -21,7 +21,7 @@ Options:
   --bucket BUCKET         Name of the GCS bucket to use for state (required)
   --location LOCATION     Bucket location, e.g. us, us-central1 (required for creation)
   --prefix PREFIX         Object prefix inside the bucket (default: opentofu/base)
-  --backend-file PATH     Where to write backend.hcl (default: infra/cloud/gcp/base/backend.hcl)
+  --backend-file PATH     Where to write backend.hcl (default: cloud/gcp/base/backend.hcl)
   --state-admin PRINCIPAL Grant roles/storage.objectAdmin on the bucket to this principal
                           (service account email or user, e.g. user:you@example.com)
   --force                 Overwrite backend file if it already exists

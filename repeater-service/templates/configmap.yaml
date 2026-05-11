@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "repeater-service.fullname" . }}-config
+  labels:
+    {{- include "repeater-service.labels" . | nindent 4 }}
+data:
+  registration.yaml: |
+    id: {{ .Values.config.appserviceId }}
+    url: {{ .Values.config.appserviceUrl }}
+    as_token: {{ .Values.config.asToken }}
+    hs_token: {{ .Values.config.hsToken }}
+    sender_localpart: {{ .Values.config.senderLocalpart }}
+    rate_limited: false
+    namespaces:
+      users: []
+      aliases: []
+      rooms:
+        - regex: '.*'
+          exclusive: false

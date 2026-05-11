@@ -1,0 +1,92 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "repeater-service.fullname" . }}
+  labels:
+    {{- include "repeater-service.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "repeater-service.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "repeater-service.selectorLabels" . | nindent 8 }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      serviceAccountName: {{ include "repeater-service.serviceAccountName" . }}
+      securityContext:
+        fsGroup: 1000
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: {{ include "repeater-service.name" . }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - containerPort: {{ .Values.service.port }}
+              name: http
+          env:
+            - name: PORT
+              value: {{ .Values.service.port | quote }}
+            - name: HOMESERVER_URL
+              value: {{ .Values.config.homeserverUrl | quote }}
+            - name: APPSERVICE_ID
+              value: {{ .Values.config.appserviceId | quote }}
+            - name: APPSERVICE_URL
+              value: {{ .Values.config.appserviceUrl | quote }}
+            - name: AS_TOKEN
+              value: {{ .Values.config.asToken | quote }}
+            - name: HS_TOKEN
+              value: {{ .Values.config.hsToken | quote }}
+            - name: SENDER_LOCALPART
+              value: {{ .Values.config.senderLocalpart | quote }}
+            - name: SERVER_NAME
+              value: {{ .Values.config.serverName | quote }}
+            - name: STORAGE_PROVIDER
+              value: {{ .Values.config.storageProvider | quote }}
+            - name: SQLITE_PATH
+              value: {{ .Values.config.sqlitePath | quote }}
+            - name: RECEIVE_LOG_LEVEL
+              value: {{ .Values.config.receiveLogLevel | quote }}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          {{- with .Values.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      volumes:
+        - name: data
+          {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "repeater-service.fullname" . }}-data
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
