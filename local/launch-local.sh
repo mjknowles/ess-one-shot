@@ -27,6 +27,17 @@ MAUTRIX_SIGNAL_IMAGE_PULL_POLICY="${MAUTRIX_SIGNAL_IMAGE_PULL_POLICY:-IfNotPrese
 MAUTRIX_SIGNAL_SERVICE_PORT="${MAUTRIX_SIGNAL_SERVICE_PORT:-29328}"
 MAUTRIX_SIGNAL_CHART_DIR="${MAUTRIX_SIGNAL_CHART_DIR:-${SCRIPT_DIR}/../mautrix-signal}"
 
+REPEATER_SERVICE_NAMESPACE="${REPEATER_SERVICE_NAMESPACE:-${NAMESPACE}}"
+REPEATER_SERVICE_RELEASE_NAME="${REPEATER_SERVICE_RELEASE_NAME:-repeater-service}"
+REPEATER_SERVICE_REPLICA_COUNT="${REPEATER_SERVICE_REPLICA_COUNT:-1}"
+REPEATER_SERVICE_CHART_DIR="${REPEATER_SERVICE_CHART_DIR:-${SCRIPT_DIR}/../repeater-service}"
+REPEATER_SERVICE_IMAGE_REPOSITORY="${REPEATER_SERVICE_IMAGE_REPOSITORY:-localhost:${KIND_REGISTRY_PORT}/repeater-service}"
+REPEATER_SERVICE_IMAGE_TAG="${REPEATER_SERVICE_IMAGE_TAG:-dev}"
+REPEATER_SERVICE_IMAGE_PULL_POLICY="${REPEATER_SERVICE_IMAGE_PULL_POLICY:-IfNotPresent}"
+REPEATER_SERVICE_PORT="${REPEATER_SERVICE_PORT:-29330}"
+REPEATER_SERVICE_AS_TOKEN="${REPEATER_SERVICE_AS_TOKEN:-dev-repeater-as-token}"
+REPEATER_SERVICE_HS_TOKEN="${REPEATER_SERVICE_HS_TOKEN:-dev-repeater-hs-token}"
+
 fatal() {
   echo "ERROR: $*" >&2
   exit 1
@@ -508,6 +519,14 @@ ensure_mautrix_signal_namespace() {
   kubectl create namespace "$MAUTRIX_SIGNAL_NAMESPACE"
 }
 
+ensure_repeater_service_namespace() {
+  if kubectl get ns "$REPEATER_SERVICE_NAMESPACE" >/dev/null 2>&1; then
+    return
+  fi
+
+  kubectl create namespace "$REPEATER_SERVICE_NAMESPACE"
+}
+
 prepare_mautrix_signal() {
   if [[ ! -d "${MAUTRIX_SIGNAL_CHART_DIR}" ]]; then
     fatal "Missing mautrix-signal chart directory: ${MAUTRIX_SIGNAL_CHART_DIR}"
@@ -550,14 +569,6 @@ ${MAUTRIX_SIGNAL_CONFIG_CONTENT}
 ${MAUTRIX_SIGNAL_REGISTRATION_CONTENT}
 EOF
 
-  MAUTRIX_SIGNAL_ESS_VALUES="${TMP_DIR}/mautrix-signal-ess-values.yaml"
-  cat > "${MAUTRIX_SIGNAL_ESS_VALUES}" <<EOF
-synapse:
-  appservices:
-    - configMap: "${MAUTRIX_SIGNAL_CONFIGMAP_RESOURCE}"
-      configMapKey: registration.yaml
-EOF
-
   MAUTRIX_SIGNAL_VALUES="${TMP_DIR}/mautrix-signal-values.yaml"
   cat > "${MAUTRIX_SIGNAL_VALUES}" <<EOF
 replicaCount: ${MAUTRIX_SIGNAL_REPLICA_COUNT}
@@ -578,6 +589,68 @@ resources:
 EOF
 }
 
+prepare_synapse_appservices() {
+  APP_SERVICE_ESS_VALUES="${TMP_DIR}/appservices-ess-values.yaml"
+  cat > "${APP_SERVICE_ESS_VALUES}" <<EOF
+synapse:
+  appservices:
+    - configMap: "${MAUTRIX_SIGNAL_CONFIGMAP_RESOURCE}"
+      configMapKey: registration.yaml
+    - configMap: "${REPEATER_SERVICE_CONFIGMAP_RESOURCE}"
+      configMapKey: registration.yaml
+EOF
+}
+
+prepare_repeater_service() {
+  if [[ ! -d "${REPEATER_SERVICE_CHART_DIR}" ]]; then
+    fatal "Missing repeater-service chart directory: ${REPEATER_SERVICE_CHART_DIR}"
+  fi
+
+  REPEATER_SERVICE_CHART_NAME="repeater-service"
+  if [[ "${REPEATER_SERVICE_RELEASE_NAME}" == *"${REPEATER_SERVICE_CHART_NAME}"* ]]; then
+    REPEATER_SERVICE_CONFIGMAP_NAME="${REPEATER_SERVICE_RELEASE_NAME}"
+  else
+    REPEATER_SERVICE_CONFIGMAP_NAME="${REPEATER_SERVICE_RELEASE_NAME}-${REPEATER_SERVICE_CHART_NAME}"
+  fi
+  REPEATER_SERVICE_CONFIGMAP_NAME="${REPEATER_SERVICE_CONFIGMAP_NAME:0:63}"
+  REPEATER_SERVICE_CONFIGMAP_NAME="${REPEATER_SERVICE_CONFIGMAP_NAME%-}"
+  REPEATER_SERVICE_CONFIGMAP_RESOURCE="${REPEATER_SERVICE_CONFIGMAP_NAME}-config"
+  REPEATER_SERVICE_CONFIGMAP_RESOURCE="${REPEATER_SERVICE_CONFIGMAP_RESOURCE:0:63}"
+  REPEATER_SERVICE_CONFIGMAP_RESOURCE="${REPEATER_SERVICE_CONFIGMAP_RESOURCE%-}"
+
+  REPEATER_SERVICE_VALUES="${TMP_DIR}/repeater-service-values.yaml"
+  cat > "${REPEATER_SERVICE_VALUES}" <<EOF
+replicaCount: ${REPEATER_SERVICE_REPLICA_COUNT}
+image:
+  repository: ${REPEATER_SERVICE_IMAGE_REPOSITORY}
+  tag: ${REPEATER_SERVICE_IMAGE_TAG}
+  pullPolicy: ${REPEATER_SERVICE_IMAGE_PULL_POLICY}
+service:
+  type: ClusterIP
+  port: ${REPEATER_SERVICE_PORT}
+config:
+  homeserverUrl: http://ess-synapse:8008
+  appserviceId: repeater
+  appserviceUrl: http://${REPEATER_SERVICE_CONFIGMAP_NAME}:${REPEATER_SERVICE_PORT}
+  senderLocalpart: repeater
+  serverName: ess.localhost
+  storageProvider: sqlite
+  sqlitePath: /data/repeater.db
+  asToken: ${REPEATER_SERVICE_AS_TOKEN}
+  hsToken: ${REPEATER_SERVICE_HS_TOKEN}
+resources:
+  requests:
+    cpu: 25m
+    memory: 64Mi
+EOF
+}
+
+build_repeater_service_image() {
+  echo "Building repeater-service image '${REPEATER_SERVICE_IMAGE_REPOSITORY}:${REPEATER_SERVICE_IMAGE_TAG}'..."
+  docker build -t "${REPEATER_SERVICE_IMAGE_REPOSITORY}:${REPEATER_SERVICE_IMAGE_TAG}" "${REPEATER_SERVICE_CHART_DIR}"
+  docker push "${REPEATER_SERVICE_IMAGE_REPOSITORY}:${REPEATER_SERVICE_IMAGE_TAG}" >/dev/null
+}
+
 install_ess_chart() {
   echo "Deploying ESS chart into namespace '$NAMESPACE'..."
   local helm_cmd=(
@@ -596,13 +669,22 @@ install_ess_chart() {
       helm_cmd+=(-f "$file")
     done < <(find "$VALUES_DIR" -maxdepth 1 -type f \( -name '*.yml' -o -name '*.yaml' \) | LC_ALL=C sort)
   fi
-  if [[ -n "${MAUTRIX_SIGNAL_ESS_VALUES:-}" && -f "${MAUTRIX_SIGNAL_ESS_VALUES}" ]]; then
-    helm_cmd+=(-f "${MAUTRIX_SIGNAL_ESS_VALUES}")
+  if [[ -n "${APP_SERVICE_ESS_VALUES:-}" && -f "${APP_SERVICE_ESS_VALUES}" ]]; then
+    helm_cmd+=(-f "${APP_SERVICE_ESS_VALUES}")
   fi
 
   "${helm_cmd[@]}"
 
   echo "ESS chart installation command completed."
+}
+
+install_repeater_service_chart() {
+  echo "Deploying repeater-service chart into namespace '${REPEATER_SERVICE_NAMESPACE}'..."
+  helm upgrade --install "${REPEATER_SERVICE_RELEASE_NAME}" "${REPEATER_SERVICE_CHART_DIR}" \
+    --namespace "${REPEATER_SERVICE_NAMESPACE}" \
+    --create-namespace \
+    --wait \
+    -f "${REPEATER_SERVICE_VALUES}"
 }
 
 install_mautrix_signal_chart() {
@@ -627,8 +709,13 @@ main() {
   ensure_cert_manager
   ensure_namespace
   ensure_mautrix_signal_namespace
+  ensure_repeater_service_namespace
   prepare_mautrix_signal
+  prepare_repeater_service
+  prepare_synapse_appservices
+  build_repeater_service_image
   kubectl apply -f "${MAUTRIX_SIGNAL_CONFIGMAP_MANIFEST}"
+  install_repeater_service_chart
   install_ess_chart
   install_mautrix_signal_chart
 
