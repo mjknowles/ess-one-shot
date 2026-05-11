@@ -4,3 +4,6 @@ synapse:
       config: |
         ip_range_whitelist:
         - 127.0.0.0/8
+        rc_registration:
+          per_second: 100
+          burst_count: 100
