@@ -5,14 +5,14 @@ SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
 CLUSTER_NAME="ess-one-shot"
 NAMESPACE="ess"
-VALUES_DIR="${PWD}/ess-values"
+VALUES_DIR="${SCRIPT_DIR}/ess-values"
 CHART_REF="oci://ghcr.io/element-hq/ess-helm/matrix-stack"
-CA_DIR="${PWD}/.ca"
+CA_DIR="${SCRIPT_DIR}/.ca"
 CA_CERT_FILE="${CA_DIR}/ca.crt"
 CA_KEY_FILE="${CA_DIR}/ca.pem"
 CA_FINGERPRINT_FILE="${CA_DIR}/ca.sha256"
 TRUST_CA="${ESS_TRUST_CA:-true}"
-COMPOSE_FILE="${PWD}/docker-compose.yml"
+COMPOSE_FILE="${SCRIPT_DIR}/docker-compose.yml"
 KIND_REGISTRY_NAME="${ESS_KIND_REGISTRY_NAME:-kind-registry}"
 KIND_REGISTRY_PORT="${ESS_KIND_REGISTRY_PORT:-5001}"
 

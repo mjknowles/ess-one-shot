@@ -13,7 +13,7 @@ Follow these steps to bring the Element Server Suite online on GKE Autopilot wit
 
 ## 1. Set your inputs
 
-Create `infra/cloud/gcp/terraform.tfvars` with the project and DNS details:
+Create `cloud/gcp/terraform.tfvars` with the project and DNS details:
 
 ```hcl
 project_id     = "ess-one-shot"
@@ -26,7 +26,7 @@ dns_zone_name  = "mjknowles-dev-zone"
 
 One bucket, two prefixes—one per stack. Run these once to write backend files:
 
-- Base backend (`infra/cloud/gcp/base/backend.hcl`, prefix `opentofu/base`):
+- Base backend (`cloud/gcp/base/backend.hcl`, prefix `opentofu/base`):
 
   ```bash
   ./init-remote-state.sh \
@@ -36,7 +36,7 @@ One bucket, two prefixes—one per stack. Run these once to write backend files:
     --backend-file base/backend.hcl
   ```
 
-- Gateway backend (`infra/cloud/gcp/gateway/backend.hcl`, prefix `opentofu/gateway`):
+- Gateway backend (`cloud/gcp/gateway/backend.hcl`, prefix `opentofu/gateway`):
   ```bash
   ./init-remote-state.sh \
     --project ess-one-shot \
@@ -67,7 +67,7 @@ gcloud container clusters get-credentials "ess-one-shot-gke2" \
 
 ## 4. Deploy the platform charts
 
-Once `kubectl` reaches the cluster, drop the mautrix-signal bridge configuration into `infra/mautrix-signal/config/` (the directory is ignored by Git) and run the helper script. The deploy helper renders those files into a ConfigMap inside the `ess` namespace, deploys the Element Server Suite, and then upgrades the mautrix-signal bridge against that same ConfigMap:
+Once `kubectl` reaches the cluster, drop the mautrix-signal bridge configuration into `mautrix-signal/config/` (the directory is ignored by Git) and run the helper script. The deploy helper renders those files into a ConfigMap inside the `ess` namespace, deploys the Element Server Suite, and then upgrades the mautrix-signal bridge against that same ConfigMap:
 
 ```bash
 ./deploy-charts.sh
@@ -150,12 +150,12 @@ tofu state rm \
   time_sleep.wait_for_gateway_api
 ```
 
-Leave `data.google_client_config.default` and `data.terraform_remote_state.base` untouched; they are data-only references and do not affect state drift. Once the state is cleaned up, rerun `tofu -chdir=infra/cloud/gcp/gateway destroy` to validate nothing remains.
+Leave `data.google_client_config.default` and `data.terraform_remote_state.base` untouched; they are data-only references and do not affect state drift. Once the state is cleaned up, rerun `tofu -chdir=cloud/gcp/gateway destroy` to validate nothing remains.
 
 If the base stack state has already been deleted, the remote-state data source in the gateway module no longer has outputs and `tofu destroy` will fail. In that case, remove the remaining data-only entries and skip the destroy step:
 
 ```bash
-pushd infra/cloud/gcp/gateway
+pushd cloud/gcp/gateway
 tofu state rm data.google_client_config.default data.terraform_remote_state.base || true
 popd
 ```
@@ -169,7 +169,7 @@ If the script fails, these steps usually get things moving again:
 - Let the `tofu apply` finish (or fail) before retrying Helm work so the outputs the script reads stay consistent.
 - Inspect the rendered values (`/tmp/.../ess-values.yaml`) referenced in the script output to confirm credentials and hostnames match expectations.
 - Verify your kubeconfig context and permissions (`kubectl auth can-i create secrets -n ess`).
-- If a release gets wedged, use `helm uninstall <release> -n <namespace>` and re-run `./infra/cloud/gcp/deploy-charts.sh`.
+- If a release gets wedged, use `helm uninstall <release> -n <namespace>` and re-run `./cloud/gcp/deploy-charts.sh`.
 
 ```
 

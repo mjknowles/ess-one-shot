@@ -1,0 +1,45 @@
+nameOverride: ""
+fullnameOverride: ""
+
+replicaCount: 1
+
+image:
+  repository: repeater-service
+  tag: latest
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+service:
+  type: ClusterIP
+  port: 29330
+
+config:
+  homeserverUrl: http://ess-synapse:8008
+  appserviceId: repeater
+  appserviceUrl: http://repeater-service:29330
+  senderLocalpart: repeater
+  serverName: ess.localhost
+  storageProvider: sqlite
+  sqlitePath: /data/repeater.db
+  asToken: dev-as-token-change-me
+  hsToken: dev-hs-token-change-me
+
+persistence:
+  enabled: false
+  size: 1Gi
+  storageClassName: ""
+
+serviceAccount:
+  create: false
+  name: ""
+
+podAnnotations: {}
+
+resources: {}
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
