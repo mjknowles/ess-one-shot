@@ -63,6 +63,27 @@ function parseLimit(url: URL): number {
   return Math.max(1, Math.min(parsed, 500));
 }
 
+function logReceivedEvents(config: Config, txnId: string, events: RawMatrixEvent[]): void {
+  if (config.receiveLogLevel === "off") return;
+
+  console.log(`received Matrix appservice transaction ${txnId} with ${events.length} event(s)`);
+  for (const event of events) {
+    console.log(
+      [
+        "received Matrix event",
+        `event_id=${typeof event.event_id === "string" ? event.event_id : "<missing>"}`,
+        `room_id=${typeof event.room_id === "string" ? event.room_id : "<missing>"}`,
+        `type=${typeof event.type === "string" ? event.type : "<missing>"}`,
+        `sender=${typeof event.sender === "string" ? event.sender : "<missing>"}`,
+        `origin_server_ts=${typeof event.origin_server_ts === "number" ? event.origin_server_ts : "<missing>"}`
+      ].join(" ")
+    );
+    if (config.receiveLogLevel === "json") {
+      console.log(JSON.stringify(event));
+    }
+  }
+}
+
 export function createHttpServer(config: Config, storage: StorageProvider, sse: SseHub = new SseHub()): Server {
   return createServer(async (request, response) => {
     const url = new URL(request.url ?? "/", "http://localhost");
@@ -100,6 +121,7 @@ export function createHttpServer(config: Config, storage: StorageProvider, sse: 
         if (request.method === "PUT" && parts[3] === "transactions" && parts[4]) {
           const txn = await readJson<AppserviceTransaction>(request);
           const events = Array.isArray(txn.events) ? txn.events : [];
+          logReceivedEvents(config, parts[4], events);
           const result = await storage.processTransaction(parts[4], events);
 
           if (!result.duplicate) {

@@ -12,6 +12,7 @@ export type Config = {
   serverName: string;
   storageProvider: "sqlite";
   sqlitePath: string;
+  receiveLogLevel: "off" | "summary" | "json";
 };
 
 function intFromEnv(name: string, fallback: number): number {
@@ -26,6 +27,14 @@ function intFromEnv(name: string, fallback: number): number {
 
 function token(name: string): string {
   return process.env[name] ?? `dev-${name.toLowerCase()}-${randomBytes(16).toString("hex")}`;
+}
+
+function receiveLogLevelFromEnv(): Config["receiveLogLevel"] {
+  const value = (process.env.RECEIVE_LOG_LEVEL ?? "summary").toLowerCase();
+  if (value === "off" || value === "summary" || value === "json") {
+    return value;
+  }
+  throw new Error("RECEIVE_LOG_LEVEL must be one of: off, summary, json");
 }
 
 export function loadConfig(): Config {
@@ -45,6 +54,7 @@ export function loadConfig(): Config {
     senderLocalpart: process.env.SENDER_LOCALPART ?? "repeater",
     serverName: process.env.SERVER_NAME ?? "ess.localhost",
     storageProvider,
-    sqlitePath: process.env.SQLITE_PATH ?? "/data/repeater.db"
+    sqlitePath: process.env.SQLITE_PATH ?? "/data/repeater.db",
+    receiveLogLevel: receiveLogLevelFromEnv()
   };
 }

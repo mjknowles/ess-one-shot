@@ -26,6 +26,7 @@ npm run dev
 | `SERVER_NAME` | `ess.localhost` | Local Matrix server name used in generated registration. |
 | `STORAGE_PROVIDER` | `sqlite` | Storage provider. Only `sqlite` is implemented initially. |
 | `SQLITE_PATH` | `/data/repeater.db` | SQLite database path. |
+| `RECEIVE_LOG_LEVEL` | `summary` | Receive logging level: `off`, `summary`, or `json`. |
 
 ## API
 

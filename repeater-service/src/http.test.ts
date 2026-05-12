@@ -16,7 +16,8 @@ const config: Config = {
   senderLocalpart: "repeater",
   serverName: "ess.localhost",
   storageProvider: "sqlite",
-  sqlitePath: ":memory:"
+  sqlitePath: ":memory:",
+  receiveLogLevel: "off"
 };
 
 describe("raw event API", () => {

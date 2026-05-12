@@ -53,6 +53,8 @@ spec:
               value: {{ .Values.config.storageProvider | quote }}
             - name: SQLITE_PATH
               value: {{ .Values.config.sqlitePath | quote }}
+            - name: RECEIVE_LOG_LEVEL
+              value: {{ .Values.config.receiveLogLevel | quote }}
           livenessProbe:
             httpGet:
               path: /healthz

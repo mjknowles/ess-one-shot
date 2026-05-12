@@ -22,6 +22,7 @@ config:
   serverName: ess.localhost
   storageProvider: sqlite
   sqlitePath: /data/repeater.db
+  receiveLogLevel: summary
   asToken: dev-as-token-change-me
   hsToken: dev-hs-token-change-me
 

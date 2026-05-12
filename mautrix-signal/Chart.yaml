@@ -3,4 +3,4 @@ name: mautrix-signal
 description: Bridge between Matrix and Signal using mautrix-signal
 type: application
 version: 0.1.0
-appVersion: "v0.8.6"
+appVersion: "v0.2604.0"

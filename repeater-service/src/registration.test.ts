@@ -16,7 +16,8 @@ describe("registrationYaml", () => {
       senderLocalpart: "repeater",
       serverName: "ess.localhost",
       storageProvider: "sqlite",
-      sqlitePath: ":memory:"
+      sqlitePath: ":memory:",
+      receiveLogLevel: "off"
     };
 
     const yaml = registrationYaml(config);
