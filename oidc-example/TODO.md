@@ -1,0 +1,3 @@
+- add callback: https://account.ess.localhost/upstream/callback/01HFS6S2SVAR7Y7QYMZJ53ZAGZ
+- set .env vals
+- set local routing for https://oidc.ess.localhost

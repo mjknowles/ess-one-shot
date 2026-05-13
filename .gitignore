@@ -3,3 +3,4 @@
 **/backend.hcl
 .gcloud
 **/.ca
+oidc-example/.env

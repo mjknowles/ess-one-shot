@@ -1,0 +1,189 @@
+def parse_dotenv(path):
+    values = {}
+    content = str(read_file(path, default = ""))
+    for raw_line in content.splitlines():
+        line = raw_line.strip()
+        if line == "" or line.startswith("#"):
+            continue
+
+        if line.startswith("export "):
+            line = line[len("export "):].strip()
+
+        parts = line.split("=", 1)
+        if len(parts) != 2:
+            continue
+
+        key = parts[0].strip()
+        value = parts[1].strip()
+        if (value.startswith('"') and value.endswith('"')) or (value.startswith("'") and value.endswith("'")):
+            value = value[1:-1]
+
+        values[key] = value
+
+    return values
+
+dotenv = parse_dotenv(".env")
+
+def env(name, default = ""):
+    value = os.getenv(name, "")
+    if value != "":
+        return value
+    return dotenv.get(name, default)
+
+namespace = env("OIDC_EXAMPLE_NAMESPACE", "ess")
+image = env("OIDC_EXAMPLE_IMAGE", "oidc-example")
+public_base_url = env("OIDC_EXAMPLE_PUBLIC_BASE_URL", "https://oidc.ess.localhost")
+google_client_id = env("GOOGLE_OIDC_CLIENT_ID", env("OIDC_EXAMPLE_CLIENT_ID"))
+google_client_secret = env("GOOGLE_OIDC_CLIENT_SECRET", env("OIDC_EXAMPLE_CLIENT_SECRET"))
+cookie_secret = env("OIDC_EXAMPLE_COOKIE_SECRET", "dev-cookie-secret-change-me")
+mas_public_base_url = env("MAS_PUBLIC_BASE_URL", "https://account.ess.localhost")
+mas_internal_base_url = env("MAS_INTERNAL_BASE_URL", "http://ess-matrix-authentication-service:8080")
+mas_google_provider_id = env("MAS_GOOGLE_PROVIDER_ID", "01HFS6S2SVAR7Y7QYMZJ53ZAGZ")
+mas_google_provider_name = env("MAS_GOOGLE_PROVIDER_NAME", "Google")
+mas_oauth_client_id = env("MAS_OAUTH_CLIENT_ID", "01J44RKQYM4G3TNVANTMTDYTX6")
+mas_oauth_client_secret = env("MAS_OAUTH_CLIENT_SECRET", "dev-mas-oauth-client-secret-change-me")
+mas_oauth_scope = env("MAS_OAUTH_SCOPE", "openid urn:matrix:org.matrix.msc2967.client:api:*")
+matrix_homeserver_internal_url = env("MATRIX_HOMESERVER_INTERNAL_URL", "http://ess-synapse-main:8008")
+
+if google_client_id == "" or google_client_secret == "":
+    fail("Set GOOGLE_OIDC_CLIENT_ID and GOOGLE_OIDC_CLIENT_SECRET in .env before running tilt up.")
+
+docker_build(
+    image,
+    ".",
+)
+
+oidc_resources = [
+    {
+        "apiVersion": "v1",
+        "kind": "Secret",
+        "metadata": {
+            "name": "oidc-example",
+            "namespace": namespace,
+        },
+        "type": "Opaque",
+        "stringData": {
+            "COOKIE_SECRET": cookie_secret,
+            "MAS_OAUTH_CLIENT_SECRET": mas_oauth_client_secret,
+        },
+    },
+    {
+        "apiVersion": "apps/v1",
+        "kind": "Deployment",
+        "metadata": {
+            "name": "oidc-example",
+            "namespace": namespace,
+            "labels": {"app.kubernetes.io/name": "oidc-example"},
+        },
+        "spec": {
+            "replicas": 1,
+            "selector": {"matchLabels": {"app.kubernetes.io/name": "oidc-example"}},
+            "template": {
+                "metadata": {"labels": {"app.kubernetes.io/name": "oidc-example"}},
+                "spec": {
+                    "containers": [{
+                        "name": "oidc-example",
+                        "image": image,
+                        "ports": [{"name": "http", "containerPort": 8080}],
+                        "env": [
+                            {"name": "PORT", "value": "8080"},
+                            {"name": "PUBLIC_BASE_URL", "value": public_base_url},
+                            {"name": "COOKIE_SECRET", "valueFrom": {"secretKeyRef": {"name": "oidc-example", "key": "COOKIE_SECRET"}}},
+                            {"name": "MAS_PUBLIC_BASE_URL", "value": mas_public_base_url},
+                            {"name": "MAS_INTERNAL_BASE_URL", "value": mas_internal_base_url},
+                            {"name": "MAS_OAUTH_CLIENT_ID", "value": mas_oauth_client_id},
+                            {"name": "MAS_OAUTH_CLIENT_SECRET", "valueFrom": {"secretKeyRef": {"name": "oidc-example", "key": "MAS_OAUTH_CLIENT_SECRET"}}},
+                            {"name": "MAS_OAUTH_SCOPE", "value": mas_oauth_scope},
+                            {"name": "MATRIX_HOMESERVER_INTERNAL_URL", "value": matrix_homeserver_internal_url},
+                        ],
+                        "readinessProbe": {"httpGet": {"path": "/healthz", "port": "http"}},
+                        "livenessProbe": {"httpGet": {"path": "/healthz", "port": "http"}},
+                        "resources": {
+                            "requests": {"cpu": "25m", "memory": "64Mi"},
+                            "limits": {"memory": "128Mi"},
+                        },
+                    }],
+                },
+            },
+        },
+    },
+    {
+        "apiVersion": "v1",
+        "kind": "Service",
+        "metadata": {
+            "name": "oidc-example",
+            "namespace": namespace,
+            "labels": {"app.kubernetes.io/name": "oidc-example"},
+        },
+        "spec": {
+            "type": "ClusterIP",
+            "selector": {"app.kubernetes.io/name": "oidc-example"},
+            "ports": [{"name": "http", "port": 80, "targetPort": "http"}],
+        },
+    },
+    {
+        "apiVersion": "networking.k8s.io/v1",
+        "kind": "Ingress",
+        "metadata": {
+            "name": "oidc-example",
+            "namespace": namespace,
+            "annotations": {
+                "cert-manager.io/cluster-issuer": "ess-selfsigned",
+            },
+        },
+        "spec": {
+            "ingressClassName": "nginx",
+            "tls": [{
+                "hosts": ["oidc.ess.localhost"],
+                "secretName": "oidc-example-tls",
+            }],
+            "rules": [{
+                "host": "oidc.ess.localhost",
+                "http": {
+                    "paths": [{
+                        "path": "/",
+                        "pathType": "Prefix",
+                        "backend": {
+                            "service": {
+                                "name": "oidc-example",
+                                "port": {"name": "http"},
+                            },
+                        },
+                    }],
+                },
+            }],
+        },
+    },
+]
+
+for resource in oidc_resources:
+    k8s_yaml(encode_yaml(resource))
+
+k8s_resource(
+    "oidc-example",
+    port_forwards=["8080:8080"],
+)
+
+local_resource(
+    "mas-google-oidc",
+    cmd="bash apply-mas-google-oidc.sh",
+    env={
+        "OIDC_EXAMPLE_NAMESPACE": namespace,
+        "GOOGLE_OIDC_CLIENT_ID": google_client_id,
+        "GOOGLE_OIDC_CLIENT_SECRET": google_client_secret,
+        "MAS_GOOGLE_PROVIDER_ID": mas_google_provider_id,
+        "MAS_GOOGLE_PROVIDER_NAME": mas_google_provider_name,
+        "MAS_OAUTH_CLIENT_ID": mas_oauth_client_id,
+        "MAS_OAUTH_CLIENT_SECRET": mas_oauth_client_secret,
+        "OIDC_EXAMPLE_PUBLIC_BASE_URL": public_base_url,
+    },
+    deps=[
+        "../local/ess-values/ingress.yaml",
+        "../local/ess-values/letsencrypt.yaml",
+        "../local/ess-values/mas.yaml",
+        "../local/ess-values/rtc.yaml",
+        "../local/ess-values/synapse.yaml",
+        "apply-mas-google-oidc.sh",
+    ],
+    resource_deps=["oidc-example"],
+)
