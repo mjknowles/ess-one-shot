@@ -33,10 +33,10 @@ def env(name, default = ""):
 namespace = env("OIDC_EXAMPLE_NAMESPACE", "ess")
 image = env("OIDC_EXAMPLE_IMAGE", "oidc-example")
 public_base_url = env("OIDC_EXAMPLE_PUBLIC_BASE_URL", "https://oidc.ess.localhost")
-google_client_id = env("GOOGLE_OIDC_CLIENT_ID", env("OIDC_EXAMPLE_CLIENT_ID"))
-google_client_secret = env("GOOGLE_OIDC_CLIENT_SECRET", env("OIDC_EXAMPLE_CLIENT_SECRET"))
+google_client_id = env("GOOGLE_OIDC_CLIENT_ID")
+google_client_secret = env("GOOGLE_OIDC_CLIENT_SECRET")
 cookie_secret = env("OIDC_EXAMPLE_COOKIE_SECRET", "dev-cookie-secret-change-me")
-mas_public_base_url = env("MAS_PUBLIC_BASE_URL", "https://account.ess.localhost")
+mas_public_base_url = env("MAS_PUBLIC_BASE_URL", "https://localhost:8443")
 mas_internal_base_url = env("MAS_INTERNAL_BASE_URL", "http://ess-matrix-authentication-service:8080")
 mas_google_provider_id = env("MAS_GOOGLE_PROVIDER_ID", "01HFS6S2SVAR7Y7QYMZJ53ZAGZ")
 mas_google_provider_name = env("MAS_GOOGLE_PROVIDER_NAME", "Google")
@@ -154,6 +154,39 @@ oidc_resources = [
             }],
         },
     },
+    {
+        "apiVersion": "networking.k8s.io/v1",
+        "kind": "Ingress",
+        "metadata": {
+            "name": "mas-localhost",
+            "namespace": namespace,
+            "annotations": {
+                "cert-manager.io/cluster-issuer": "ess-selfsigned",
+            },
+        },
+        "spec": {
+            "ingressClassName": "nginx",
+            "tls": [{
+                "hosts": ["localhost"],
+                "secretName": "mas-localhost-tls",
+            }],
+            "rules": [{
+                "host": "localhost",
+                "http": {
+                    "paths": [{
+                        "path": "/",
+                        "pathType": "Prefix",
+                        "backend": {
+                            "service": {
+                                "name": "ess-matrix-authentication-service",
+                                "port": {"number": 8080},
+                            },
+                        },
+                    }],
+                },
+            }],
+        },
+    },
 ]
 
 for resource in oidc_resources:
@@ -165,25 +198,59 @@ k8s_resource(
 )
 
 local_resource(
+    "mas-google-oidc-env-check",
+    cmd="test -n \"$GOOGLE_OIDC_CLIENT_ID\" && test -n \"$GOOGLE_OIDC_CLIENT_SECRET\"",
+    env={
+        "GOOGLE_OIDC_CLIENT_ID": google_client_id,
+        "GOOGLE_OIDC_CLIENT_SECRET": google_client_secret,
+    },
+    deps=[".env"],
+)
+
+k8s_custom_deploy(
     "mas-google-oidc",
-    cmd="bash apply-mas-google-oidc.sh",
+    apply_cmd="bash mas-overlay.sh apply",
+    delete_cmd="bash mas-overlay.sh delete",
+    deps=["mas-overlay.sh", ".env"],
+    apply_env={
+        "OIDC_EXAMPLE_NAMESPACE": namespace,
+        "GOOGLE_OIDC_CLIENT_ID": google_client_id,
+        "GOOGLE_OIDC_CLIENT_SECRET": google_client_secret,
+        "MAS_GOOGLE_PROVIDER_ID": mas_google_provider_id,
+        "MAS_GOOGLE_PROVIDER_NAME": mas_google_provider_name,
+        "MAS_PUBLIC_BASE_URL": mas_public_base_url,
+        "MAS_OAUTH_CLIENT_ID": mas_oauth_client_id,
+        "MAS_OAUTH_CLIENT_SECRET": mas_oauth_client_secret,
+        "OIDC_EXAMPLE_PUBLIC_BASE_URL": public_base_url,
+    },
+    delete_env={
+        "OIDC_EXAMPLE_NAMESPACE": namespace,
+    },
+)
+
+k8s_resource(
+    "mas-google-oidc",
+    resource_deps=["oidc-example", "mas-google-oidc-env-check"],
+)
+
+local_resource(
+    "mas-google-oidc-note",
+    cmd="printf 'MAS OIDC overlay is reversible; tilt down restores the saved MAS config.\\n'",
     env={
         "OIDC_EXAMPLE_NAMESPACE": namespace,
         "GOOGLE_OIDC_CLIENT_ID": google_client_id,
         "GOOGLE_OIDC_CLIENT_SECRET": google_client_secret,
         "MAS_GOOGLE_PROVIDER_ID": mas_google_provider_id,
         "MAS_GOOGLE_PROVIDER_NAME": mas_google_provider_name,
+        "MAS_PUBLIC_BASE_URL": mas_public_base_url,
         "MAS_OAUTH_CLIENT_ID": mas_oauth_client_id,
         "MAS_OAUTH_CLIENT_SECRET": mas_oauth_client_secret,
         "OIDC_EXAMPLE_PUBLIC_BASE_URL": public_base_url,
     },
-    deps=[
-        "../local/ess-values/ingress.yaml",
-        "../local/ess-values/letsencrypt.yaml",
-        "../local/ess-values/mas.yaml",
-        "../local/ess-values/rtc.yaml",
-        "../local/ess-values/synapse.yaml",
-        "apply-mas-google-oidc.sh",
-    ],
-    resource_deps=["oidc-example"],
+    resource_deps=["mas-google-oidc"],
+)
+
+local_resource(
+    "mas-localhost-forward",
+    serve_cmd="kubectl -n ingress-nginx port-forward svc/ingress-nginx-controller 8443:443",
 )

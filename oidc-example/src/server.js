@@ -6,7 +6,7 @@ const config = {
   port: intEnv("PORT", 8080),
   publicBaseUrl: requiredEnv("PUBLIC_BASE_URL").replace(/\/$/, ""),
   cookieSecret: env("COOKIE_SECRET", crypto.randomBytes(32).toString("hex")),
-  masPublicBaseUrl: env("MAS_PUBLIC_BASE_URL", "https://account.ess.localhost").replace(/\/$/, ""),
+  masPublicBaseUrl: env("MAS_PUBLIC_BASE_URL", "https://localhost:8443").replace(/\/$/, ""),
   masInternalBaseUrl: env("MAS_INTERNAL_BASE_URL", "http://ess-matrix-authentication-service:8080").replace(/\/$/, ""),
   masClientId: requiredEnv("MAS_OAUTH_CLIENT_ID"),
   masClientSecret: requiredEnv("MAS_OAUTH_CLIENT_SECRET"),
@@ -67,15 +67,6 @@ function authenticatedHome(session) {
         <pre>${escapeHtml(JSON.stringify(session.whoami, null, 2))}</pre>
       </details>
     </section>
-    <form method="post" action="/bridge-placeholder">
-      <h2>Bridge Setup Placeholder</h2>
-      <label>
-        Messaging account
-        <input name="account" placeholder="example account id">
-      </label>
-      <p>Your production app can use this MAS-issued Matrix token to call Synapse and bridge provisioning APIs on this user's behalf.</p>
-      <button type="button" disabled>Configure bridge</button>
-    </form>
     <p><a class="button secondary" href="/logout">Sign out</a></p>`;
 }
 
@@ -91,7 +82,7 @@ function startMasLogin(res) {
     expiresAt: Date.now() + 10 * 60 * 1000,
   });
 
-  const authUrl = new URL(`${config.masPublicBaseUrl}/oauth2/authorize`);
+  const authUrl = new URL(`${config.masPublicBaseUrl}/authorize`);
   authUrl.search = new URLSearchParams({
     client_id: config.masClientId,
     redirect_uri: callbackUrl(),

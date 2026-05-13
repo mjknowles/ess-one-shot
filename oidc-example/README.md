@@ -10,9 +10,9 @@ The proof of concept stays isolated in this directory.
 Create a Google Cloud OAuth client:
 
 - Application type: `Web application`
-- Authorized JavaScript origins: `https://account.ess.localhost`
+- Authorized JavaScript origins: `https://localhost:8443`
 - Authorized redirect URI:
-  - `https://account.ess.localhost/upstream/callback/01HFS6S2SVAR7Y7QYMZJ53ZAGZ`
+  - `https://localhost:8443/upstream/callback/01HFS6S2SVAR7Y7QYMZJ53ZAGZ`
 
 Google redirects only to MAS. `oidc-example` never receives Google tokens.
 
@@ -32,7 +32,9 @@ cp .env.example .env
 tilt up
 ```
 
-The app is available at `https://oidc.ess.localhost/`.
+The app is available at `https://oidc.ess.localhost/`. Tilt also keeps a
+port-forward open so MAS is reachable for the browser and Google callback at
+`https://localhost:8443`.
 
 ### Flow
 
