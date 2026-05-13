@@ -67,7 +67,47 @@ function authenticatedHome(session) {
         <pre>${escapeHtml(JSON.stringify(session.whoami, null, 2))}</pre>
       </details>
     </section>
+    ${matrixSmokeTestSection(session.matrixTest)}
     <p><a class="button secondary" href="/logout">Sign out</a></p>`;
+}
+
+function matrixSmokeTestSection(matrixTest) {
+  if (matrixTest.error) {
+    return `
+      <section>
+        <h2>Matrix API Smoke Test</h2>
+        <p class="error">${escapeHtml(matrixTest.error)}</p>
+        <details>
+          <summary>Partial result</summary>
+          <pre>${escapeHtml(JSON.stringify(matrixTest, null, 2))}</pre>
+        </details>
+      </section>`;
+  }
+
+  return `
+    <section>
+      <h2>Matrix API Smoke Test</h2>
+      <dl>
+        <dt>Room ID</dt><dd>${escapeHtml(matrixTest.room_id)}</dd>
+        <dt>Event ID</dt><dd>${escapeHtml(matrixTest.event_id)}</dd>
+      </dl>
+      <details>
+        <summary>Create room request</summary>
+        <pre>${escapeHtml(JSON.stringify(matrixTest.createRoomRequest, null, 2))}</pre>
+      </details>
+      <details>
+        <summary>Create room response</summary>
+        <pre>${escapeHtml(JSON.stringify(matrixTest.createRoomResponse, null, 2))}</pre>
+      </details>
+      <details>
+        <summary>Message request</summary>
+        <pre>${escapeHtml(JSON.stringify(matrixTest.messageRequest, null, 2))}</pre>
+      </details>
+      <details>
+        <summary>Message response</summary>
+        <pre>${escapeHtml(JSON.stringify(matrixTest.messageResponse, null, 2))}</pre>
+      </details>
+    </section>`;
 }
 
 function startMasLogin(res) {
@@ -114,11 +154,15 @@ async function finishMasLogin(_req, res, url) {
 
   const token = await exchangeMasCode(code, login.codeVerifier);
   const whoami = await verifySynapseAccessToken(token.access_token);
+  const matrixTest = await runMatrixSmokeTest(token.access_token).catch((error) => ({
+    error: error.message,
+  }));
 
   const sessionId = randomUrlSafe(32);
   sessions.set(sessionId, {
     token,
     whoami,
+    matrixTest,
     createdAt: Date.now(),
   });
   setCookie(res, "oidc_example", sign(sessionId), { maxAge: 60 * 60 * 8 });
@@ -162,6 +206,66 @@ async function verifySynapseAccessToken(accessToken) {
   const payload = await response.json().catch(() => null);
   if (!response.ok) {
     throw new Error(`Synapse /whoami failed with HTTP ${response.status}: ${JSON.stringify(payload)}`);
+  }
+  return payload;
+}
+
+async function runMatrixSmokeTest(accessToken) {
+  const timestamp = new Date().toISOString();
+  const createRoomRequest = {
+    name: `OIDC Example Smoke Test ${timestamp}`,
+    topic: "Created by oidc-example to validate MAS-issued Matrix API access.",
+    preset: "private_chat",
+    visibility: "private",
+  };
+
+  const createRoom = await matrixJson(accessToken, "/_matrix/client/v3/createRoom", {
+    method: "POST",
+    body: createRoomRequest,
+  });
+
+  const roomId = createRoom.room_id;
+  if (!roomId) {
+    throw new Error(`Synapse createRoom response did not include room_id: ${JSON.stringify(createRoom)}`);
+  }
+
+  const messageRequest = {
+    msgtype: "m.text",
+    body: `OIDC example smoke test message at ${timestamp}`,
+  };
+  const sendMessage = await matrixJson(accessToken, `/_matrix/client/v3/rooms/${encodeURIComponent(roomId)}/send/m.room.message`, {
+    method: "POST",
+    body: messageRequest,
+  });
+
+  const eventId = sendMessage.event_id;
+  if (!eventId) {
+    throw new Error(`Synapse send message response did not include event_id: ${JSON.stringify(sendMessage)}`);
+  }
+
+  return {
+    room_id: roomId,
+    event_id: eventId,
+    createRoomRequest,
+    createRoomResponse: createRoom,
+    messageRequest,
+    messageResponse: sendMessage,
+  };
+}
+
+async function matrixJson(accessToken, path, { method, body }) {
+  const response = await fetch(`${config.matrixHomeserverInternalUrl}${path}`, {
+    method,
+    headers: {
+      authorization: `Bearer ${accessToken}`,
+      "content-type": "application/json",
+      accept: "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new Error(`Synapse ${method} ${path} failed with HTTP ${response.status}: ${JSON.stringify(payload)}`);
   }
   return payload;
 }
