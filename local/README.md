@@ -25,6 +25,14 @@ Spin up a local Kubernetes cluster and deploy the Element Server Suite (ESS) com
 kubectl exec -n ess -it deploy/ess-matrix-authentication-service -- mas-cli manage register-user
 ```
 
+### Quick Commands
+
+Run an interactive `psql` session against the local Synapse database:
+
+```bash
+kubectl -n ess exec -it ess-postgres-0 -c postgres -- psql -U postgres -d synapse
+```
+
 ### Tear down
 
 ```bash
